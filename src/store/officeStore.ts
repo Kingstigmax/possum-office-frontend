@@ -11,7 +11,7 @@ interface User {
 }
 
 interface OfficeStore {
-  users: Map<string, User>;
+  users: User[];
   addUser: (user: User) => void;
   removeUser: (socketId: string) => void;
   updateUserPosition: (socketId: string, x: number, y: number) => void;
@@ -20,44 +20,33 @@ interface OfficeStore {
 }
 
 export const useOfficeStore = create<OfficeStore>((set) => ({
-  users: new Map(),
+  users: [],
   
-  addUser: (user) => set((state) => {
-    const newUsers = new Map(state.users);
-    newUsers.set(user.socketId || user.id, user);
-    return { users: newUsers };
-  }),
+  addUser: (user) => set((state) => ({
+    users: [...state.users.filter(u => (u.socketId || u.id) !== (user.socketId || user.id)), user]
+  })),
   
-  removeUser: (socketId) => set((state) => {
-    const newUsers = new Map(state.users);
-    newUsers.delete(socketId);
-    return { users: newUsers };
-  }),
+  removeUser: (socketId) => set((state) => ({
+    users: state.users.filter(user => (user.socketId || user.id) !== socketId)
+  })),
   
-  updateUserPosition: (socketId, x, y) => set((state) => {
-    const newUsers = new Map(state.users);
-    const user = newUsers.get(socketId);
-    if (user) {
-      user.x = x;
-      user.y = y;
-    }
-    return { users: newUsers };
-  }),
+  updateUserPosition: (socketId, x, y) => set((state) => ({
+    users: state.users.map(user => 
+      (user.socketId || user.id) === socketId 
+        ? { ...user, x, y }
+        : user
+    )
+  })),
   
-  updateUserStatus: (socketId, status) => set((state) => {
-    const newUsers = new Map(state.users);
-    const user = newUsers.get(socketId);
-    if (user) {
-      user.status = status;
-    }
-    return { users: newUsers };
-  }),
+  updateUserStatus: (socketId, status) => set((state) => ({
+    users: state.users.map(user => 
+      (user.socketId || user.id) === socketId 
+        ? { ...user, status }
+        : user
+    )
+  })),
   
-  setUsers: (users) => set(() => {
-    const newUsers = new Map();
-    users.forEach(user => {
-      newUsers.set(user.socketId || user.id, user);
-    });
-    return { users: newUsers };
-  }),
+  setUsers: (users) => set(() => ({
+    users: users
+  })),
 }));

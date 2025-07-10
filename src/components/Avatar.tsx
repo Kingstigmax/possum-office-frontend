@@ -1,3 +1,5 @@
+import React from 'react';
+
 interface AvatarProps {
     id: string;
     name: string;
