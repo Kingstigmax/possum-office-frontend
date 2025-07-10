@@ -55,13 +55,60 @@ export default function Chat({ socket, currentUserId, currentUserName }: ChatPro
   if (!socket) return null;
 
   return (
-    <div className="bg-white rounded-lg shadow-md">
+    <div style={{
+      borderRadius: '0 0 24px 24px',
+      overflow: 'hidden',
+      background: 'transparent'
+    }}>
       {/* Header */}
-      <div className="bg-blue-500 text-white px-4 py-3 rounded-t-lg flex justify-between items-center">
-        <span className="font-semibold">Team Chat</span>
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white',
+        padding: '20px 25px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        borderRadius: '24px 24px 0 0',
+        boxShadow: '0 8px 25px rgba(102, 126, 234, 0.3)'
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <span style={{
+            fontSize: '20px'
+          }}>💬</span>
+          <span style={{
+            fontSize: '18px',
+            fontWeight: 'bold',
+            fontFamily: 'system-ui, -apple-system, sans-serif'
+          }}>
+            Team Chat
+          </span>
+        </div>
         <button 
           onClick={() => setIsMinimized(!isMinimized)}
-          className="hover:bg-blue-600 px-2 py-1 rounded text-sm"
+          style={{
+            background: 'rgba(255, 255, 255, 0.2)',
+            color: 'white',
+            padding: '8px 12px',
+            borderRadius: '12px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.3)'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.3)';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
         >
           {isMinimized ? '▲' : '▼'}
         </button>
@@ -70,23 +117,77 @@ export default function Chat({ socket, currentUserId, currentUserName }: ChatPro
       {/* Messages */}
       {!isMinimized && (
         <>
-          <div className="h-64 overflow-y-auto p-4 space-y-3 bg-gray-50">
+          <div style={{
+            height: '320px',
+            overflowY: 'auto',
+            padding: '20px 25px',
+            background: 'rgba(255, 255, 255, 0.6)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '15px'
+          }}>
             {messages.length === 0 ? (
-              <div className="text-gray-500 text-sm text-center py-8">
-                No messages yet. Start the conversation!
+              <div style={{
+                color: 'rgba(107, 114, 128, 0.8)',
+                fontSize: '14px',
+                textAlign: 'center',
+                padding: '40px 20px',
+                fontStyle: 'italic',
+                background: 'rgba(102, 126, 234, 0.05)',
+                borderRadius: '16px',
+                border: '1px solid rgba(102, 126, 234, 0.1)'
+              }}>
+                ✨ No messages yet. Start the conversation!
               </div>
             ) : (
               messages.map((msg, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs font-medium text-blue-600">
+                <div key={idx} style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '6px',
+                  animation: 'message-appear 0.3s ease-out'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
+                  }}>
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      background: msg.own 
+                        ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                        : 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent'
+                    }}>
                       {msg.own ? 'You' : msg.fromName}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span style={{
+                      fontSize: '11px',
+                      color: 'rgba(107, 114, 128, 0.6)'
+                    }}>
                       {new Date(msg.timestamp).toLocaleTimeString()}
                     </span>
                   </div>
-                  <div className="text-sm text-gray-800 bg-white p-2 rounded">
+                  <div style={{
+                    fontSize: '14px',
+                    color: '#374151',
+                    background: msg.own 
+                      ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                      : 'rgba(255, 255, 255, 0.8)',
+                    padding: '12px 16px',
+                    borderRadius: '16px',
+                    border: msg.own 
+                      ? '1px solid rgba(102, 126, 234, 0.2)'
+                      : '1px solid rgba(255, 255, 255, 0.5)',
+                    backdropFilter: 'blur(10px)',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.05)',
+                    alignSelf: msg.own ? 'flex-end' : 'flex-start',
+                    maxWidth: '80%',
+                    wordWrap: 'break-word'
+                  }}>
                     {msg.message}
                   </div>
                 </div>
@@ -96,26 +197,109 @@ export default function Chat({ socket, currentUserId, currentUserName }: ChatPro
           </div>
 
           {/* Input */}
-          <div className="border-t p-3 bg-white rounded-b-lg">
-            <div className="flex space-x-2">
+          <div style={{
+            padding: '20px 25px',
+            background: 'rgba(255, 255, 255, 0.8)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: '0 0 24px 24px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.3)'
+          }}>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'flex-end'
+            }}>
               <input
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                placeholder="Type a message..."
-                className="flex-1 px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                placeholder="Type a magical message..."
+                style={{
+                  flex: 1,
+                  padding: '12px 16px',
+                  border: '2px solid rgba(102, 126, 234, 0.3)',
+                  borderRadius: '16px',
+                  fontSize: '14px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  outline: 'none',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+                  transition: 'all 0.3s ease',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#667eea';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.3)';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.3)';
+                  e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
+                }}
               />
               <button
                 onClick={sendMessage}
-                className="bg-blue-500 text-white p-2 rounded-lg hover:bg-blue-600 flex-shrink-0"
+                style={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  padding: '12px',
+                  borderRadius: '16px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 25px rgba(102, 126, 234, 0.4)',
+                  transition: 'all 0.3s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minWidth: '48px',
+                  height: '48px'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)';
+                }}
               >
-                <Send size={16} />
+                <Send size={18} />
               </button>
             </div>
           </div>
         </>
       )}
+      
+      <style jsx>{`
+        @keyframes message-appear {
+          0% { 
+            opacity: 0; 
+            transform: translateY(10px) scale(0.95); 
+          }
+          100% { 
+            opacity: 1; 
+            transform: translateY(0) scale(1); 
+          }
+        }
+        
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+          width: 6px;
+        }
+        
+        ::-webkit-scrollbar-track {
+          background: rgba(255, 255, 255, 0.1);
+          border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          border-radius: 3px;
+        }
+        
+        ::-webkit-scrollbar-thumb:hover {
+          background: linear-gradient(135deg, #5a6fd8 0%, #6b5b95 100%);
+        }
+      `}</style>
     </div>
   );
 }
