@@ -607,6 +607,24 @@ export default function VirtualOffice() {
               transform: scale(0.5) translateY(-40px) rotate(180deg); 
             }
           }
+          @keyframes office-glow {
+            0%, 100% { 
+              box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2); 
+            }
+            50% { 
+              box-shadow: 0 35px 70px rgba(102, 126, 234, 0.3); 
+            }
+          }
+          @keyframes gentle-float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-5px); }
+          }
+          @media (max-width: 1024px) {
+            .office-main-layout {
+              grid-template-columns: 1fr !important;
+              gap: 20px !important;
+            }
+          }
         `}</style>
       </div>
     );
@@ -614,17 +632,127 @@ export default function VirtualOffice() {
 
   // Show office view when logged in
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto p-4 max-w-7xl">
+    <div style={{
+      minHeight: '100vh',
+      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      position: 'relative',
+      overflow: 'hidden'
+    }}>
+      {/* Animated Background Elements */}
+      <div style={{
+        position: 'absolute',
+        top: '5%',
+        left: '5%',
+        width: '200px',
+        height: '200px',
+        background: 'radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%)',
+        borderRadius: '50%',
+        animation: 'float 8s ease-in-out infinite'
+      }}></div>
+      <div style={{
+        position: 'absolute',
+        top: '60%',
+        right: '10%',
+        width: '150px',
+        height: '150px',
+        background: 'radial-gradient(circle, rgba(255,255,255,0.05) 0%, transparent 70%)',
+        borderRadius: '50%',
+        animation: 'float 6s ease-in-out infinite reverse'
+      }}></div>
+      <div style={{
+        position: 'absolute',
+        bottom: '20%',
+        left: '15%',
+        width: '100px',
+        height: '100px',
+        background: 'radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 70%)',
+        borderRadius: '50%',
+        animation: 'float 7s ease-in-out infinite'
+      }}></div>
+      
+      {/* Office Sparkles */}
+      <div style={{
+        position: 'absolute',
+        top: '10%',
+        right: '20%',
+        fontSize: '16px',
+        animation: 'sparkle 4s ease-in-out infinite'
+      }}>✨</div>
+      <div style={{
+        position: 'absolute',
+        top: '30%',
+        left: '8%',
+        fontSize: '12px',
+        animation: 'sparkle 3s ease-in-out infinite 1s'
+      }}>⭐</div>
+      <div style={{
+        position: 'absolute',
+        bottom: '40%',
+        right: '5%',
+        fontSize: '14px',
+        animation: 'sparkle 3.5s ease-in-out infinite 2s'
+      }}>✨</div>
+      <div style={{
+        position: 'absolute',
+        bottom: '15%',
+        right: '25%',
+        fontSize: '18px',
+        animation: 'sparkle 4.5s ease-in-out infinite 0.5s'
+      }}>⭐</div>
+      
+      <div style={{
+        position: 'relative',
+        zIndex: 10,
+        padding: '20px',
+        maxWidth: '1600px',
+        margin: '0 auto'
+      }}>
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-md p-4 mb-4">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold text-gray-800">Possum Office Space</h1>
-            <div className="flex items-center gap-4">
+        <div style={{
+          background: 'rgba(255, 255, 255, 0.95)',
+          borderRadius: '24px',
+          padding: '30px',
+          marginBottom: '30px',
+          boxShadow: '0 25px 50px rgba(0, 0, 0, 0.2)',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255, 255, 255, 0.3)',
+          animation: 'gentle-float 10s ease-in-out infinite'
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <h1 style={{
+              fontSize: '36px',
+              fontWeight: 'bold',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              margin: '0',
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}>
+              Possum Office Space
+            </h1>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '20px'
+            }}>
               <select 
                 value={status} 
                 onChange={(e) => handleStatusChange(e.target.value)}
-                className="px-3 py-1 border rounded-md text-sm"
+                style={{
+                  padding: '12px 20px',
+                  border: '2px solid rgba(102, 126, 234, 0.3)',
+                  borderRadius: '16px',
+                  fontSize: '14px',
+                  background: 'rgba(255, 255, 255, 0.9)',
+                  cursor: 'pointer',
+                  outline: 'none',
+                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+                  transition: 'all 0.3s ease'
+                }}
               >
                 <option value="available">🟢 Available</option>
                 <option value="busy">🔴 Busy</option>
@@ -633,7 +761,26 @@ export default function VirtualOffice() {
               </select>
               <button
                 onClick={handleLeaveOffice}
-                className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition"
+                style={{
+                  padding: '12px 24px',
+                  background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+                  border: 'none',
+                  borderRadius: '16px',
+                  color: 'white',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 8px 25px rgba(240, 147, 251, 0.4)',
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translateY(-2px)';
+                  e.currentTarget.style.boxShadow = '0 12px 35px rgba(240, 147, 251, 0.6)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translateY(0)';
+                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(240, 147, 251, 0.4)';
+                }}
               >
                 Leave Office
               </button>
@@ -642,21 +789,64 @@ export default function VirtualOffice() {
         </div>
 
         {/* Main Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) 400px',
+          gap: '30px'
+        }}
+        className="office-main-layout"
+        >
           {/* Office Map */}
-          <div className="lg:col-span-3 bg-white rounded-lg shadow-md p-4">
-            <h2 className="text-lg font-semibold mb-3">Office Floor Plan</h2>
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.95)',
+            borderRadius: '24px',
+            padding: '30px',
+            boxShadow: '0 25px 50px rgba(0, 0, 0, 0.2)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.3)',
+            animation: 'gentle-float 6s ease-in-out infinite'
+          }}>
+            <h2 style={{
+              fontSize: '24px',
+              fontWeight: 'bold',
+              marginBottom: '20px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              fontFamily: 'system-ui, -apple-system, sans-serif'
+            }}>
+              Office Floor Plan
+            </h2>
             <div 
               ref={officeRef}
-              className="relative bg-gray-200 rounded-lg overflow-hidden cursor-pointer"
+              style={{
+                position: 'relative',
+                borderRadius: '20px',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                boxShadow: '0 15px 35px rgba(0, 0, 0, 0.1)',
+                transition: 'all 0.3s ease'
+              }}
               onClick={handleOfficeClick}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-2px)';
+                e.currentTarget.style.boxShadow = '0 20px 40px rgba(0, 0, 0, 0.15)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 15px 35px rgba(0, 0, 0, 0.1)';
+              }}
             >
               <Image
                 src="/office-floorplan.jpg"
                 alt="Office Floor Plan"
                 width={1400}
                 height={700}
-                className="w-full h-auto"
+                style={{
+                  width: '100%',
+                  height: 'auto',
+                  display: 'block'
+                }}
                 priority
               />
               
@@ -686,47 +876,157 @@ export default function VirtualOffice() {
               ))}
 
               {/* Connection indicator */}
-              <div className="absolute top-4 left-4 bg-green-500 text-white px-3 py-1 rounded-full text-sm">
+              <div style={{
+                position: 'absolute',
+                top: '20px',
+                left: '20px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                padding: '8px 16px',
+                borderRadius: '20px',
+                fontSize: '14px',
+                fontWeight: '600',
+                boxShadow: '0 8px 25px rgba(16, 185, 129, 0.4)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(255, 255, 255, 0.2)'
+              }}>
                 Connected as {me.name}
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Click anywhere on the floor to move
+            <p style={{
+              fontSize: '14px',
+              color: 'rgba(107, 114, 128, 0.8)',
+              marginTop: '15px',
+              textAlign: 'center',
+              fontStyle: 'italic'
+            }}>
+              ✨ Click anywhere on the floor to move around the office
             </p>
           </div>
 
           {/* Sidebar */}
-          <div className="space-y-4">
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '30px'
+          }}>
             {/* Team Members */}
-            <div className="bg-white rounded-lg shadow-md p-4">
-              <h2 className="text-lg font-semibold mb-3">Team Members ({users.length + 1})</h2>
-              <div className="space-y-2 max-h-96 overflow-y-auto">
-                <div className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.95)',
+              borderRadius: '24px',
+              padding: '25px',
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              animation: 'gentle-float 7s ease-in-out infinite'
+            }}>
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: 'bold',
+                marginBottom: '20px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                fontFamily: 'system-ui, -apple-system, sans-serif'
+              }}>
+                Team Members ({users.length + 1})
+              </h2>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px',
+                maxHeight: '400px',
+                overflowY: 'auto'
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(102, 126, 234, 0.2)'
+                }}>
                   <img
                     src={`https://api.dicebear.com/7.x/${me.avatarSeed?.split('-')[0].toLowerCase()}/svg?seed=${me.avatarSeed?.split('-')[1]}`}
                     alt={me.name}
-                    style={{ width: '20px', height: '20px' }}
-                    className="rounded-full"
+                    style={{ 
+                      width: '32px', 
+                      height: '32px',
+                      borderRadius: '50%',
+                      border: '2px solid #667eea',
+                      background: 'white'
+                    }}
                   />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{me.name} (You)</div>
-                    <div className="text-xs text-gray-500 capitalize">{me.status}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151'
+                    }}>
+                      {me.name} (You)
+                    </div>
+                    <div style={{
+                      fontSize: '12px',
+                      color: '#6b7280',
+                      textTransform: 'capitalize'
+                    }}>
+                      {me.status}
+                    </div>
                   </div>
                 </div>
                 {users.map((user) => (
-                  <div key={user.socketId || user.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded">
+                  <div 
+                    key={user.socketId || user.id} 
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      background: 'rgba(255, 255, 255, 0.6)',
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.5)',
+                      transition: 'all 0.3s ease',
+                      cursor: 'pointer'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
+                      e.currentTarget.style.transform = 'translateY(-1px)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
+                      e.currentTarget.style.transform = 'translateY(0)';
+                    }}
+                  >
                     <img
                       src={user.avatarSeed ? 
                         `https://api.dicebear.com/7.x/${user.avatarSeed.split('-')[0].toLowerCase()}/svg?seed=${user.avatarSeed.split('-')[1]}` :
                         `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`
                       }
                       alt={user.name}
-                      style={{ width: '20px', height: '20px' }}
-                      className="rounded-full"
+                      style={{ 
+                        width: '32px', 
+                        height: '32px',
+                        borderRadius: '50%',
+                        border: '2px solid rgba(102, 126, 234, 0.3)',
+                        background: 'white'
+                      }}
                     />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{user.name}</div>
-                      <div className="text-xs text-gray-500 capitalize">{user.status}</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        color: '#374151'
+                      }}>
+                        {user.name}
+                      </div>
+                      <div style={{
+                        fontSize: '12px',
+                        color: '#6b7280',
+                        textTransform: 'capitalize'
+                      }}>
+                        {user.status}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -734,19 +1034,62 @@ export default function VirtualOffice() {
             </div>
 
             {/* Quick Actions */}
-            <div className="bg-white rounded-lg shadow-md p-4">
-              <h2 className="text-lg font-semibold mb-3">Quick Actions</h2>
-              <div className="space-y-2">
-                <p className="text-sm text-gray-500">More actions coming soon...</p>
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.95)',
+              borderRadius: '24px',
+              padding: '25px',
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              animation: 'gentle-float 8s ease-in-out infinite'
+            }}>
+              <h2 style={{
+                fontSize: '20px',
+                fontWeight: 'bold',
+                marginBottom: '20px',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                fontFamily: 'system-ui, -apple-system, sans-serif'
+              }}>
+                Quick Actions
+              </h2>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '12px'
+              }}>
+                <p style={{
+                  fontSize: '14px',
+                  color: 'rgba(107, 114, 128, 0.8)',
+                  textAlign: 'center',
+                  fontStyle: 'italic',
+                  padding: '20px',
+                  background: 'rgba(102, 126, 234, 0.05)',
+                  borderRadius: '16px',
+                  border: '1px solid rgba(102, 126, 234, 0.1)'
+                }}>
+                  ✨ More actions coming soon...
+                </p>
               </div>
             </div>
 
             {/* Global Chat */}
-            <Chat
-              socket={socket}
-              currentUserId={me.id}
-              currentUserName={me.name}
-            />
+            <div style={{
+              background: 'rgba(255, 255, 255, 0.95)',
+              borderRadius: '24px',
+              boxShadow: '0 25px 50px rgba(0, 0, 0, 0.2)',
+              backdropFilter: 'blur(10px)',
+              border: '1px solid rgba(255, 255, 255, 0.3)',
+              overflow: 'hidden',
+              animation: 'gentle-float 9s ease-in-out infinite'
+            }}>
+              <Chat
+                socket={socket}
+                currentUserId={me.id}
+                currentUserName={me.name}
+              />
+            </div>
           </div>
         </div>
       </div>
