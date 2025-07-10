@@ -39,6 +39,14 @@ export default function VirtualOffice() {
   const [avatarSeed, setAvatarSeed] = useState(Math.random().toString());
   const [possumSparkles, setPossumSparkles] = useState<Array<{id: number, x: number, y: number}>>([]);
   
+  // Office activity states
+  const [activities, setActivities] = useState<Array<{
+    type: 'join' | 'leave';
+    userName: string;
+    timestamp: Date;
+    message: string;
+  }>>([]);
+  
   // Zustand store
   const { users, addUser, removeUser, updateUserPosition, updateUserStatus, setUsers } = useOfficeStore();
   
@@ -120,6 +128,16 @@ export default function VirtualOffice() {
       newSocket.on('user:left', (socketId: string) => {
         console.log('User left:', socketId);
         removeUser(socketId);
+      });
+
+      newSocket.on('office:activity', (activity: {
+        type: 'join' | 'leave';
+        userName: string;
+        timestamp: Date;
+        message: string;
+      }) => {
+        console.log('Office activity:', activity);
+        setActivities(prev => [...prev.slice(-9), { ...activity, timestamp: new Date(activity.timestamp) }]); // Keep last 10 activities
       });
 
       setSocket(newSocket);
@@ -619,6 +637,16 @@ export default function VirtualOffice() {
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-5px); }
           }
+          @keyframes activity-appear {
+            0% { 
+              opacity: 0; 
+              transform: translateX(-10px) scale(0.95); 
+            }
+            100% { 
+              opacity: 1; 
+              transform: translateX(0) scale(1); 
+            }
+          }
           @media (max-width: 1024px) {
             .office-main-layout {
               grid-template-columns: 1fr !important;
@@ -1033,7 +1061,7 @@ export default function VirtualOffice() {
               </div>
             </div>
 
-            {/* Quick Actions */}
+            {/* Office Activity Overview */}
             <div style={{
               background: 'rgba(255, 255, 255, 0.95)',
               borderRadius: '24px',
@@ -1050,27 +1078,91 @@ export default function VirtualOffice() {
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
-                fontFamily: 'system-ui, -apple-system, sans-serif'
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
               }}>
-                Quick Actions
+                <span style={{ fontSize: '22px' }}>🏢</span>
+                Office Activity
               </h2>
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '12px'
+                gap: '10px',
+                maxHeight: '300px',
+                overflowY: 'auto'
               }}>
-                <p style={{
-                  fontSize: '14px',
-                  color: 'rgba(107, 114, 128, 0.8)',
-                  textAlign: 'center',
-                  fontStyle: 'italic',
-                  padding: '20px',
-                  background: 'rgba(102, 126, 234, 0.05)',
-                  borderRadius: '16px',
-                  border: '1px solid rgba(102, 126, 234, 0.1)'
-                }}>
-                  ✨ More actions coming soon...
-                </p>
+                {activities.length === 0 ? (
+                  <div style={{
+                    fontSize: '14px',
+                    color: 'rgba(107, 114, 128, 0.8)',
+                    textAlign: 'center',
+                    fontStyle: 'italic',
+                    padding: '20px',
+                    background: 'rgba(102, 126, 234, 0.05)',
+                    borderRadius: '16px',
+                    border: '1px solid rgba(102, 126, 234, 0.1)'
+                  }}>
+                    🌟 No recent activity
+                  </div>
+                ) : (
+                  activities.slice().reverse().map((activity, idx) => (
+                    <div
+                      key={`${activity.timestamp.getTime()}-${idx}`}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        background: activity.type === 'join' 
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(185, 28, 28, 0.1) 100%)',
+                        borderRadius: '16px',
+                        border: activity.type === 'join'
+                          ? '1px solid rgba(16, 185, 129, 0.2)'
+                          : '1px solid rgba(239, 68, 68, 0.2)',
+                        animation: 'activity-appear 0.5s ease-out',
+                        transition: 'all 0.3s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                        e.currentTarget.style.boxShadow = '0 4px 15px rgba(0, 0, 0, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'translateY(0)';
+                        e.currentTarget.style.boxShadow = 'none';
+                      }}
+                    >
+                      <div style={{
+                        fontSize: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        width: '24px',
+                        height: '24px'
+                      }}>
+                        {activity.type === 'join' ? '🚪➡️' : '🚪⬅️'}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: '13px',
+                          fontWeight: '600',
+                          color: '#374151',
+                          marginBottom: '2px'
+                        }}>
+                          {activity.message}
+                        </div>
+                        <div style={{
+                          fontSize: '11px',
+                          color: 'rgba(107, 114, 128, 0.7)'
+                        }}>
+                          {activity.timestamp.toLocaleTimeString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
 
