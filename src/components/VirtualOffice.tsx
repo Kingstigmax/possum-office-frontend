@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Avatar from './Avatar';
-import { useSocket } from '@/hooks/useSocket';
 import { useOfficeStore } from '@/store/officeStore';
 import io, { Socket } from 'socket.io-client';
 
@@ -67,6 +66,7 @@ export default function VirtualOffice() {
   };
 
   // Socket connection
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (isConnected && !socket) {
       const newSocket = io(BACKEND_URL);
