@@ -8,6 +8,7 @@ interface User {
   y: number;
   status: string;
   avatarSeed?: string;
+  voiceEnabled?: boolean;
 }
 
 interface OfficeStore {
@@ -16,6 +17,7 @@ interface OfficeStore {
   removeUser: (socketId: string) => void;
   updateUserPosition: (socketId: string, x: number, y: number) => void;
   updateUserStatus: (socketId: string, status: string) => void;
+  updateUserVoiceStatus: (socketId: string, voiceEnabled: boolean) => void;
   setUsers: (users: User[]) => void;
 }
 
@@ -42,6 +44,14 @@ export const useOfficeStore = create<OfficeStore>((set) => ({
     users: state.users.map(user => 
       (user.socketId || user.id) === socketId 
         ? { ...user, status }
+        : user
+    )
+  })),
+
+  updateUserVoiceStatus: (socketId, voiceEnabled) => set((state) => ({
+    users: state.users.map(user => 
+      (user.socketId || user.id) === socketId 
+        ? { ...user, voiceEnabled }
         : user
     )
   })),

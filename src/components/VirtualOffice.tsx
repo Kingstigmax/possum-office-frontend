@@ -5,10 +5,12 @@ import Image from 'next/image';
 import Avatar from './Avatar';
 import Chat from './Chat';
 import { useOfficeStore } from '@/store/officeStore';
+import { useVoiceProximity } from '@/hooks/useVoiceProximity';
+import { Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
 import io, { Socket } from 'socket.io-client';
 
 // Backend URL configuration
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 interface User {
   id: string;
@@ -18,6 +20,7 @@ interface User {
   y: number;
   status: string;
   avatarSeed?: string;
+  voiceEnabled?: boolean;
 }
 
 const avatarStyles = [
@@ -48,7 +51,7 @@ export default function VirtualOffice() {
   }>>([]);
   
   // Zustand store
-  const { users, addUser, removeUser, updateUserPosition, updateUserStatus, setUsers } = useOfficeStore();
+  const { users, addUser, removeUser, updateUserPosition, updateUserStatus, updateUserVoiceStatus, setUsers } = useOfficeStore();
   
   // Current user
   const [me, setMe] = useState<User & { avatarSeed?: string }>({
@@ -57,7 +60,25 @@ export default function VirtualOffice() {
     x: 50,
     y: 80,
     status: 'available',
-    avatarSeed: undefined
+    avatarSeed: undefined,
+    voiceEnabled: false
+  });
+
+  // Voice proximity hook
+  const {
+    isVoiceEnabled,
+    isMuted,
+    usersInRange,
+    speakingUsers,
+    toggleVoice,
+    toggleMute,
+    proximityThreshold
+  } = useVoiceProximity({
+    socket,
+    currentUser: me,
+    users: users.map(u => ({ ...u, voiceEnabled: u.voiceEnabled || false })),
+    proximityThreshold: 25,
+    maxDistance: 50
   });
 
   // Handle login
@@ -130,6 +151,11 @@ export default function VirtualOffice() {
         removeUser(socketId);
       });
 
+      newSocket.on('voice:status-changed', ({ socketId, voiceEnabled }: { socketId: string; voiceEnabled: boolean }) => {
+        console.log('Voice status changed:', socketId, voiceEnabled);
+        updateUserVoiceStatus(socketId, voiceEnabled);
+      });
+
       newSocket.on('office:activity', (activity: {
         type: 'join' | 'leave';
         userName: string;
@@ -149,7 +175,7 @@ export default function VirtualOffice() {
         setSocket(null);
       }
     };
-  }, [isConnected, socket, me.id, me.avatarSeed, addUser, removeUser, updateUserPosition, updateUserStatus, setUsers]);
+  }, [isConnected, socket, me.id, me.avatarSeed, addUser, removeUser, updateUserPosition, updateUserStatus, updateUserVoiceStatus, setUsers]);
 
   // Handle office click for movement
   const handleOfficeClick = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -637,6 +663,10 @@ export default function VirtualOffice() {
             0%, 100% { transform: translateY(0px); }
             50% { transform: translateY(-5px); }
           }
+          @keyframes gentle-pulse {
+            0%, 100% { opacity: 0.3; transform: translate(-50%, -50%) scale(1); }
+            50% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.05); }
+          }
           @keyframes activity-appear {
             0% { 
               opacity: 0; 
@@ -767,6 +797,57 @@ export default function VirtualOffice() {
               alignItems: 'center',
               gap: '20px'
             }}>
+              {/* Voice Controls */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <button
+                  onClick={toggleVoice}
+                  style={{
+                    padding: '12px',
+                    background: isVoiceEnabled 
+                      ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                      : 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                    border: 'none',
+                    borderRadius: '12px',
+                    color: 'white',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+                    transition: 'all 0.3s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
+                  }}
+                  title={isVoiceEnabled ? 'Disable Voice Chat' : 'Enable Voice Chat'}
+                >
+                  {isVoiceEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                </button>
+                {isVoiceEnabled && (
+                  <button
+                    onClick={toggleMute}
+                    style={{
+                      padding: '12px',
+                      background: isMuted 
+                        ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
+                        : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                      border: 'none',
+                      borderRadius: '12px',
+                      color: 'white',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 15px rgba(0, 0, 0, 0.1)',
+                      transition: 'all 0.3s ease',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}
+                    title={isMuted ? 'Unmute' : 'Mute'}
+                  >
+                    {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
+                  </button>
+                )}
+              </div>
               <select 
                 value={status} 
                 onChange={(e) => handleStatusChange(e.target.value)}
@@ -903,6 +984,25 @@ export default function VirtualOffice() {
                 />
               ))}
 
+              {/* Voice proximity indicator */}
+              {isVoiceEnabled && (
+                <div style={{
+                  position: 'absolute',
+                  left: `${me.x}%`,
+                  top: `${me.y}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: `${proximityThreshold * 2}%`,
+                  height: `${proximityThreshold * 2}%`,
+                  borderRadius: '50%',
+                  border: '2px dashed rgba(16, 185, 129, 0.4)',
+                  background: 'rgba(16, 185, 129, 0.05)',
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                  animation: 'gentle-pulse 3s ease-in-out infinite'
+                }}
+                />
+              )}
+
               {/* Connection indicator */}
               <div style={{
                 position: 'absolute',
@@ -916,20 +1016,45 @@ export default function VirtualOffice() {
                 fontWeight: '600',
                 boxShadow: '0 8px 25px rgba(16, 185, 129, 0.4)',
                 backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.2)'
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
               }}>
                 Connected as {me.name}
+                {isVoiceEnabled && (
+                  <span style={{
+                    fontSize: '12px',
+                    background: 'rgba(255, 255, 255, 0.2)',
+                    padding: '2px 6px',
+                    borderRadius: '8px'
+                  }}>
+                    🎤 Voice Active
+                  </span>
+                )}
               </div>
             </div>
-            <p style={{
+            <div style={{
               fontSize: '14px',
               color: 'rgba(107, 114, 128, 0.8)',
               marginTop: '15px',
               textAlign: 'center',
-              fontStyle: 'italic'
+              fontStyle: 'italic',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '5px'
             }}>
-              ✨ Click anywhere on the floor to move around the office
-            </p>
+              <p style={{ margin: 0 }}>✨ Click anywhere on the floor to move around the office</p>
+              {isVoiceEnabled && (
+                <p style={{ 
+                  margin: 0,
+                  color: 'rgba(16, 185, 129, 0.8)',
+                  fontSize: '13px'
+                }}>
+                  🎤 Voice chat active - get close to others to talk!
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Sidebar */}
@@ -973,26 +1098,63 @@ export default function VirtualOffice() {
                   padding: '12px 16px',
                   background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
                   borderRadius: '16px',
-                  border: '1px solid rgba(102, 126, 234, 0.2)'
+                  border: '1px solid rgba(102, 126, 234, 0.2)',
+                  position: 'relative'
                 }}>
-                  <img
-                    src={`https://api.dicebear.com/7.x/${me.avatarSeed?.split('-')[0].toLowerCase()}/svg?seed=${me.avatarSeed?.split('-')[1]}`}
-                    alt={me.name}
-                    style={{ 
-                      width: '32px', 
-                      height: '32px',
-                      borderRadius: '50%',
-                      border: '2px solid #667eea',
-                      background: 'white'
-                    }}
-                  />
+                  <div style={{ position: 'relative' }}>
+                    <img
+                      src={`https://api.dicebear.com/7.x/${me.avatarSeed?.split('-')[0].toLowerCase()}/svg?seed=${me.avatarSeed?.split('-')[1]}`}
+                      alt={me.name}
+                      style={{ 
+                        width: '32px', 
+                        height: '32px',
+                        borderRadius: '50%',
+                        border: '2px solid #667eea',
+                        background: 'white'
+                      }}
+                    />
+                    {isVoiceEnabled && (
+                      <div style={{
+                        position: 'absolute',
+                        bottom: '-2px',
+                        right: '-2px',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        background: isMuted ? '#ef4444' : '#10b981',
+                        border: '2px solid white',
+                        fontSize: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: 'white'
+                      }}>
+                        {isMuted ? '🔇' : '🎤'}
+                      </div>
+                    )}
+                  </div>
                   <div style={{ flex: 1 }}>
                     <div style={{
                       fontSize: '14px',
                       fontWeight: '600',
-                      color: '#374151'
+                      color: '#374151',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
                     }}>
                       {me.name} (You)
+                      {isVoiceEnabled && usersInRange.length > 0 && (
+                        <span style={{
+                          fontSize: '10px',
+                          background: '#10b981',
+                          color: 'white',
+                          padding: '2px 6px',
+                          borderRadius: '8px',
+                          fontWeight: '500'
+                        }}>
+                          {usersInRange.length} nearby
+                        </span>
+                      )}
                     </div>
                     <div style={{
                       fontSize: '12px',
@@ -1003,61 +1165,126 @@ export default function VirtualOffice() {
                     </div>
                   </div>
                 </div>
-                {users.map((user) => (
-                  <div 
-                    key={user.socketId || user.id} 
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      background: 'rgba(255, 255, 255, 0.6)',
-                      borderRadius: '16px',
-                      border: '1px solid rgba(255, 255, 255, 0.5)',
-                      transition: 'all 0.3s ease',
-                      cursor: 'pointer'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.8)';
-                      e.currentTarget.style.transform = 'translateY(-1px)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.6)';
-                      e.currentTarget.style.transform = 'translateY(0)';
-                    }}
-                  >
-                    <img
-                      src={user.avatarSeed ? 
-                        `https://api.dicebear.com/7.x/${user.avatarSeed.split('-')[0].toLowerCase()}/svg?seed=${user.avatarSeed.split('-')[1]}` :
-                        `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`
-                      }
-                      alt={user.name}
-                      style={{ 
-                        width: '32px', 
-                        height: '32px',
-                        borderRadius: '50%',
-                        border: '2px solid rgba(102, 126, 234, 0.3)',
-                        background: 'white'
+                {users.map((user) => {
+                  const isUserSpeaking = speakingUsers.has(user.socketId || user.id);
+                  const isUserInRange = usersInRange.includes(user.socketId || user.id);
+                  
+                  return (
+                    <div 
+                      key={user.socketId || user.id} 
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        background: isUserSpeaking 
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)'
+                          : 'rgba(255, 255, 255, 0.6)',
+                        borderRadius: '16px',
+                        border: isUserSpeaking 
+                          ? '2px solid rgba(16, 185, 129, 0.3)'
+                          : '1px solid rgba(255, 255, 255, 0.5)',
+                        transition: 'all 0.3s ease',
+                        cursor: 'pointer',
+                        position: 'relative'
                       }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: '#374151'
-                      }}>
-                        {user.name}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = isUserSpeaking 
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(5, 150, 105, 0.15) 100%)'
+                          : 'rgba(255, 255, 255, 0.8)';
+                        e.currentTarget.style.transform = 'translateY(-1px)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = isUserSpeaking 
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(5, 150, 105, 0.1) 100%)'
+                          : 'rgba(255, 255, 255, 0.6)';
+                        e.currentTarget.style.transform = 'translateY(0)';
+                      }}
+                    >
+                      <div style={{ position: 'relative' }}>
+                        <img
+                          src={user.avatarSeed ? 
+                            `https://api.dicebear.com/7.x/${user.avatarSeed.split('-')[0].toLowerCase()}/svg?seed=${user.avatarSeed.split('-')[1]}` :
+                            `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`
+                          }
+                          alt={user.name}
+                          style={{ 
+                            width: '32px', 
+                            height: '32px',
+                            borderRadius: '50%',
+                            border: isUserSpeaking 
+                              ? '2px solid #10b981'
+                              : '2px solid rgba(102, 126, 234, 0.3)',
+                            background: 'white',
+                            animation: isUserSpeaking ? 'pulse 1s infinite' : 'none'
+                          }}
+                        />
+                        {user.voiceEnabled && (
+                          <div style={{
+                            position: 'absolute',
+                            bottom: '-2px',
+                            right: '-2px',
+                            width: '12px',
+                            height: '12px',
+                            borderRadius: '50%',
+                            background: '#10b981',
+                            border: '2px solid white',
+                            fontSize: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            color: 'white'
+                          }}>
+                            🎤
+                          </div>
+                        )}
                       </div>
-                      <div style={{
-                        fontSize: '12px',
-                        color: '#6b7280',
-                        textTransform: 'capitalize'
-                      }}>
-                        {user.status}
+                      <div style={{ flex: 1 }}>
+                        <div style={{
+                          fontSize: '14px',
+                          fontWeight: '600',
+                          color: '#374151',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px'
+                        }}>
+                          {user.name}
+                          {isUserInRange && (
+                            <span style={{
+                              fontSize: '10px',
+                              background: '#10b981',
+                              color: 'white',
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              fontWeight: '500'
+                            }}>
+                              nearby
+                            </span>
+                          )}
+                          {isUserSpeaking && (
+                            <span style={{
+                              fontSize: '10px',
+                              background: '#f59e0b',
+                              color: 'white',
+                              padding: '2px 6px',
+                              borderRadius: '8px',
+                              fontWeight: '500'
+                            }}>
+                              speaking
+                            </span>
+                          )}
+                        </div>
+                        <div style={{
+                          fontSize: '12px',
+                          color: '#6b7280',
+                          textTransform: 'capitalize'
+                        }}>
+                          {user.status}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
