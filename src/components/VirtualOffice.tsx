@@ -155,6 +155,14 @@ export default function VirtualOffice() {
         console.log('Voice status changed:', socketId, voiceEnabled);
         updateUserVoiceStatus(socketId, voiceEnabled);
       });
+      
+      // Update own voice status when it changes
+      newSocket.on('voice:status-updated', ({ socketId, voiceEnabled }: { socketId: string; voiceEnabled: boolean }) => {
+        console.log('Own voice status updated:', socketId, voiceEnabled);
+        if (socketId === newSocket.id) {
+          setMe(prev => ({ ...prev, voiceEnabled }));
+        }
+      });
 
       newSocket.on('office:activity', (activity: {
         type: 'join' | 'leave';
@@ -175,7 +183,7 @@ export default function VirtualOffice() {
         setSocket(null);
       }
     };
-  }, [isConnected, socket, me.id, me.avatarSeed, addUser, removeUser, updateUserPosition, updateUserStatus, updateUserVoiceStatus, setUsers]);
+  }, [isConnected, socket, me.id, me.avatarSeed]); // Removed Zustand store functions to prevent infinite loops
 
   // Handle office click for movement
   const handleOfficeClick = (e: React.MouseEvent<HTMLDivElement>) => {

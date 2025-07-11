@@ -18,6 +18,7 @@ interface VoiceConnection {
   audioElement: HTMLAudioElement;
   stream?: MediaStream;
   distance: number;
+  cleanupSpeakingDetection?: () => void;
 }
 
 interface VoiceProximityOptions {
@@ -49,6 +50,7 @@ export function useVoiceProximity({
   const localStreamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const gainNodesRef = useRef<Map<string, GainNode>>(new Map());
+  const lastVolumeUpdateRef = useRef<Map<string, number>>(new Map());
 
   // Calculate distance between two users
   const calculateDistance = useCallback((user1: User, user2: User): number => {
@@ -100,7 +102,7 @@ export function useVoiceProximity({
     }
 
     // Handle incoming stream
-    peerConnection.ontrack = (event) => {
+    peerConnection.ontrack = async (event) => {
       console.log('Received remote stream from:', targetUserId);
       const remoteStream = event.streams[0];
       
@@ -108,19 +110,53 @@ export function useVoiceProximity({
       const audioElement = new Audio();
       audioElement.srcObject = remoteStream;
       audioElement.autoplay = true;
-      audioElement.volume = 0; // Will be controlled by proximity
+      audioElement.volume = 1; // Will be controlled by Web Audio API
       
-      // Set up Web Audio API for volume control
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContext();
+      // Ensure audio can play
+      try {
+        await audioElement.play();
+        console.log('Audio element playing for user:', targetUserId);
+      } catch (error) {
+        console.error('Error playing audio:', error);
       }
       
-      const source = audioContextRef.current.createMediaStreamSource(remoteStream);
-      const gainNode = audioContextRef.current.createGain();
-      source.connect(gainNode);
-      gainNode.connect(audioContextRef.current.destination);
+      // Try to set up Web Audio API for volume control, with fallback to direct audio element volume
+      let useWebAudio = true;
+      let source: MediaStreamAudioSourceNode | null = null;
       
-      gainNodesRef.current.set(targetUserId, gainNode);
+      try {
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        
+        // Resume audio context if suspended
+        if (audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume();
+        }
+        
+        // Check if context is still valid
+        if (audioContextRef.current.state === 'closed') {
+          console.warn('AudioContext is closed, using direct audio element volume control');
+          useWebAudio = false;
+        } else {
+          source = audioContextRef.current.createMediaStreamSource(remoteStream);
+          const gainNode = audioContextRef.current.createGain();
+          gainNode.gain.value = 0; // Start with 0 volume, will be updated by proximity
+          
+          source.connect(gainNode);
+          gainNode.connect(audioContextRef.current.destination);
+          
+          gainNodesRef.current.set(targetUserId, gainNode);
+        }
+      } catch (error) {
+        console.warn('Web Audio API failed, using direct audio element volume control:', error);
+        useWebAudio = false;
+      }
+      
+      // Fallback to direct audio element volume control
+      if (!useWebAudio) {
+        audioElement.volume = 0; // Start with 0 volume, will be updated by proximity
+      }
       
       // Update connection with audio element
       setVoiceConnections(prev => {
@@ -133,35 +169,56 @@ export function useVoiceProximity({
         return updated;
       });
 
-      // Detect speaking
-      const analyser = audioContextRef.current.createAnalyser();
-      source.connect(analyser);
-      analyser.fftSize = 256;
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      // Detect speaking (only if Web Audio API is available)
+      if (useWebAudio && audioContextRef.current && source) {
+        const analyser = audioContextRef.current.createAnalyser();
+        source.connect(analyser);
+        analyser.fftSize = 256;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      
+      let lastSpeakingState = false;
+      let animationFrameId: number;
       
       const detectSpeaking = () => {
         analyser.getByteFrequencyData(dataArray);
         const average = dataArray.reduce((sum, value) => sum + value, 0) / dataArray.length;
         const isSpeaking = average > 10; // Threshold for speaking detection
         
-        setSpeakingUsers(prev => {
-          const newSet = new Set(prev);
-          if (isSpeaking) {
-            newSet.add(targetUserId);
-          } else {
-            newSet.delete(targetUserId);
-          }
-          return newSet;
-        });
+        // Only update state if speaking status changed
+        if (isSpeaking !== lastSpeakingState) {
+          lastSpeakingState = isSpeaking;
+          setSpeakingUsers(prev => {
+            const newSet = new Set(prev);
+            if (isSpeaking) {
+              newSet.add(targetUserId);
+            } else {
+              newSet.delete(targetUserId);
+            }
+            return newSet;
+          });
+        }
         
-        requestAnimationFrame(detectSpeaking);
+        animationFrameId = requestAnimationFrame(detectSpeaking);
       };
+      
       detectSpeaking();
+      
+      // Store cleanup function for this connection
+      const connection = voiceConnections.get(targetUserId);
+      if (connection) {
+        connection.cleanupSpeakingDetection = () => {
+          if (animationFrameId) {
+            cancelAnimationFrame(animationFrameId);
+          }
+        };
+      }
+      } // Close the if (useWebAudio && audioContextRef.current && source) block
     };
 
     // Handle ICE candidates
     peerConnection.onicecandidate = (event) => {
       if (event.candidate && socket) {
+        console.log('Sending ICE candidate to:', targetUserId);
         socket.emit('voice:ice-candidate', {
           to: targetUserId,
           candidate: event.candidate
@@ -169,82 +226,121 @@ export function useVoiceProximity({
       }
     };
 
+    // Monitor connection state
+    peerConnection.onconnectionstatechange = () => {
+      console.log('Connection state changed for', targetUserId, ':', peerConnection.connectionState);
+    };
+
+    peerConnection.oniceconnectionstatechange = () => {
+      console.log('ICE connection state changed for', targetUserId, ':', peerConnection.iceConnectionState);
+    };
+
     return peerConnection;
   }, [socket]);
 
   // Start voice connection with a user
   const startVoiceConnection = useCallback(async (targetUserId: string) => {
-    if (!socket || !localStreamRef.current) return;
+    if (!socket || !localStreamRef.current) {
+      console.error('Cannot start voice connection - socket or localStream not available');
+      return;
+    }
 
     console.log('Starting voice connection with:', targetUserId);
     
-    const peerConnection = createPeerConnection(targetUserId);
-    const offer = await peerConnection.createOffer();
-    await peerConnection.setLocalDescription(offer);
-    
-    socket.emit('voice:offer', {
-      to: targetUserId,
-      offer: offer
-    });
+    try {
+      const peerConnection = createPeerConnection(targetUserId);
+      const offer = await peerConnection.createOffer();
+      await peerConnection.setLocalDescription(offer);
+      
+      console.log('Sending voice offer to:', targetUserId);
+      socket.emit('voice:offer', {
+        to: targetUserId,
+        offer: offer
+      });
 
-    const audioElement = new Audio();
-    const connection: VoiceConnection = {
-      userId: targetUserId,
-      peerConnection,
-      audioElement,
-      distance: 0
-    };
+      const audioElement = new Audio();
+      const connection: VoiceConnection = {
+        userId: targetUserId,
+        peerConnection,
+        audioElement,
+        distance: 0
+      };
 
-    setVoiceConnections(prev => new Map(prev.set(targetUserId, connection)));
-  }, [socket, createPeerConnection]);
+      setVoiceConnections(prev => new Map(prev.set(targetUserId, connection)));
+    } catch (error) {
+      console.error('Error starting voice connection:', error);
+    }
+  }, [socket]); // Removed createPeerConnection to prevent infinite loops
 
   // Handle incoming voice offer
   const handleVoiceOffer = useCallback(async (data: { from: string; offer: RTCSessionDescriptionInit }) => {
-    if (!socket || !localStreamRef.current) return;
+    if (!socket || !localStreamRef.current) {
+      console.error('Cannot handle voice offer - socket or localStream not available');
+      return;
+    }
 
     console.log('Received voice offer from:', data.from);
     
-    const peerConnection = createPeerConnection(data.from);
-    await peerConnection.setRemoteDescription(data.offer);
-    
-    const answer = await peerConnection.createAnswer();
-    await peerConnection.setLocalDescription(answer);
-    
-    socket.emit('voice:answer', {
-      to: data.from,
-      answer: answer
-    });
+    try {
+      const peerConnection = createPeerConnection(data.from);
+      await peerConnection.setRemoteDescription(data.offer);
+      
+      const answer = await peerConnection.createAnswer();
+      await peerConnection.setLocalDescription(answer);
+      
+      console.log('Sending voice answer to:', data.from);
+      socket.emit('voice:answer', {
+        to: data.from,
+        answer: answer
+      });
 
-    const audioElement = new Audio();
-    const connection: VoiceConnection = {
-      userId: data.from,
-      peerConnection,
-      audioElement,
-      distance: 0
-    };
+      const audioElement = new Audio();
+      const connection: VoiceConnection = {
+        userId: data.from,
+        peerConnection,
+        audioElement,
+        distance: 0
+      };
 
-    setVoiceConnections(prev => new Map(prev.set(data.from, connection)));
-  }, [socket, createPeerConnection]);
+      setVoiceConnections(prev => new Map(prev.set(data.from, connection)));
+    } catch (error) {
+      console.error('Error handling voice offer:', error);
+    }
+  }, [socket]); // Removed createPeerConnection to prevent infinite loops
 
   // Handle incoming voice answer
   const handleVoiceAnswer = useCallback(async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
     console.log('Received voice answer from:', data.from);
     
-    const connection = voiceConnections.get(data.from);
-    if (connection) {
-      await connection.peerConnection.setRemoteDescription(data.answer);
+    try {
+      const connection = voiceConnections.get(data.from);
+      if (connection) {
+        await connection.peerConnection.setRemoteDescription(data.answer);
+        console.log('Set remote description for answer from:', data.from);
+      } else {
+        console.warn('No voice connection found for:', data.from);
+      }
+    } catch (error) {
+      console.error('Error handling voice answer:', error);
     }
-  }, [voiceConnections]);
+  }, []); // Removed voiceConnections dependency to prevent infinite loops
 
   // Handle ICE candidate
   const handleIceCandidate = useCallback(async (data: { from: string; candidate: RTCIceCandidateInit }) => {
     console.log('Received ICE candidate from:', data.from);
     
-    const connection = voiceConnections.get(data.from);
-    if (connection) {
-      await connection.peerConnection.addIceCandidate(data.candidate);
+    try {
+      const connection = voiceConnections.get(data.from);
+      if (connection) {
+        await connection.peerConnection.addIceCandidate(data.candidate);
+        console.log('Added ICE candidate from:', data.from);
+      } else {
+        console.warn('No voice connection found for ICE candidate from:', data.from);
+      }
+    } catch (error) {
+      console.error('Error handling ICE candidate:', error);
     }
-  }, [voiceConnections]);
+  }, []); // Removed voiceConnections dependency to prevent infinite loops
 
   // Toggle voice chat
   const toggleVoice = useCallback(async () => {
@@ -254,6 +350,16 @@ export function useVoiceProximity({
       if (stream) {
         localStreamRef.current = stream;
         setIsVoiceEnabled(true);
+        
+        // Initialize audio context
+        if (!audioContextRef.current) {
+          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        
+        // Resume audio context if suspended
+        if (audioContextRef.current.state === 'suspended') {
+          await audioContextRef.current.resume();
+        }
         
         if (socket) {
           socket.emit('voice:status', { enabled: true });
@@ -270,11 +376,19 @@ export function useVoiceProximity({
       
       // Close all connections
       voiceConnections.forEach(connection => {
+        // Clean up speaking detection
+        if (connection.cleanupSpeakingDetection) {
+          connection.cleanupSpeakingDetection();
+        }
+        
         connection.peerConnection.close();
         connection.audioElement.pause();
+        connection.audioElement.srcObject = null;
       });
       
       setVoiceConnections(new Map());
+      gainNodesRef.current.clear();
+      lastVolumeUpdateRef.current.clear();
       setIsVoiceEnabled(false);
       
       if (socket) {
@@ -283,7 +397,7 @@ export function useVoiceProximity({
       
       console.log('Voice chat disabled');
     }
-  }, [isVoiceEnabled, socket, getMicrophoneAccess, voiceConnections]);
+  }, [isVoiceEnabled, socket, getMicrophoneAccess]); // Removed voiceConnections to prevent infinite loops
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -301,48 +415,82 @@ export function useVoiceProximity({
     if (!isVoiceEnabled || !socket) return;
 
     const currentUsersInRange: string[] = [];
-    const updatedConnections = new Map(voiceConnections);
+    let connectionChanged = false;
 
     users.forEach(user => {
-      if (user.socketId === currentUser.socketId || !user.voiceEnabled) return;
+      const userSocketId = user.socketId || user.id;
+      const currentSocketId = currentUser.socketId || currentUser.id;
+      
+      if (userSocketId === currentSocketId || !user.voiceEnabled) return;
 
       const distance = calculateDistance(currentUser, user);
       
       if (distance <= proximityThreshold) {
-        currentUsersInRange.push(user.socketId!);
+        currentUsersInRange.push(userSocketId);
         
         // Start connection if not exists
-        if (!voiceConnections.has(user.socketId!)) {
-          startVoiceConnection(user.socketId!);
+        if (!voiceConnections.has(userSocketId)) {
+          console.log('Starting voice connection with user:', user.name, 'socketId:', userSocketId);
+          startVoiceConnection(userSocketId);
+          connectionChanged = true;
         } else {
           // Update distance and volume
-          const connection = updatedConnections.get(user.socketId!);
+          const connection = voiceConnections.get(userSocketId);
           if (connection) {
             connection.distance = distance;
             const volume = calculateVolume(distance);
             
-            // Update volume through Web Audio API
-            const gainNode = gainNodesRef.current.get(user.socketId!);
-            if (gainNode) {
-              gainNode.gain.value = volume;
+            // Only update volume if it has changed significantly (throttling)
+            const lastVolume = lastVolumeUpdateRef.current.get(userSocketId) || 0;
+            const volumeDiff = Math.abs(volume - lastVolume);
+            
+            if (volumeDiff > 0.1) { // Only update if volume changed by more than 10%
+              // Update volume through Web Audio API first
+              const gainNode = gainNodesRef.current.get(userSocketId);
+              if (gainNode) {
+                gainNode.gain.value = volume;
+                lastVolumeUpdateRef.current.set(userSocketId, volume);
+              } else {
+                // Fallback to direct audio element volume control
+                if (connection.audioElement) {
+                  connection.audioElement.volume = volume;
+                  lastVolumeUpdateRef.current.set(userSocketId, volume);
+                }
+              }
+              
+              console.log('Updated volume for user:', user.name, 'distance:', distance, 'volume:', volume);
             }
           }
         }
       } else {
         // Remove connection if out of range
-        const connection = voiceConnections.get(user.socketId!);
+        const connection = voiceConnections.get(userSocketId);
         if (connection) {
+          console.log('Removing voice connection for user:', user.name, 'out of range');
+          
+          // Clean up speaking detection
+          if (connection.cleanupSpeakingDetection) {
+            connection.cleanupSpeakingDetection();
+          }
+          
           connection.peerConnection.close();
           connection.audioElement.pause();
-          updatedConnections.delete(user.socketId!);
-          gainNodesRef.current.delete(user.socketId!);
+          connection.audioElement.srcObject = null;
+          
+          setVoiceConnections(prev => {
+            const updated = new Map(prev);
+            updated.delete(userSocketId);
+            return updated;
+          });
+          gainNodesRef.current.delete(userSocketId);
+          lastVolumeUpdateRef.current.delete(userSocketId);
+          connectionChanged = true;
         }
       }
     });
 
     setUsersInRange(currentUsersInRange);
-    setVoiceConnections(updatedConnections);
-  }, [users, currentUser, isVoiceEnabled, proximityThreshold, calculateDistance, calculateVolume, startVoiceConnection, voiceConnections, socket]);
+  }, [users, currentUser, isVoiceEnabled, proximityThreshold, calculateDistance, calculateVolume, startVoiceConnection, socket]);
 
   // Socket event listeners
   useEffect(() => {
@@ -357,7 +505,7 @@ export function useVoiceProximity({
       socket.off('voice:answer', handleVoiceAnswer);
       socket.off('voice:ice-candidate', handleIceCandidate);
     };
-  }, [socket, handleVoiceOffer, handleVoiceAnswer, handleIceCandidate]);
+  }, [socket]); // Removed callback dependencies to prevent infinite loop
 
   // Cleanup on unmount
   useEffect(() => {
@@ -366,16 +514,24 @@ export function useVoiceProximity({
         localStreamRef.current.getTracks().forEach(track => track.stop());
       }
       
-      voiceConnections.forEach(connection => {
+      // Use ref to access current voiceConnections at cleanup time
+      const currentConnections = voiceConnections;
+      currentConnections.forEach(connection => {
+        // Clean up speaking detection
+        if (connection.cleanupSpeakingDetection) {
+          connection.cleanupSpeakingDetection();
+        }
+        
         connection.peerConnection.close();
         connection.audioElement.pause();
+        connection.audioElement.srcObject = null;
       });
       
-      if (audioContextRef.current) {
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         audioContextRef.current.close();
       }
     };
-  }, [voiceConnections]);
+  }, []); // Remove voiceConnections from dependencies to prevent infinite loops
 
   return {
     // State
