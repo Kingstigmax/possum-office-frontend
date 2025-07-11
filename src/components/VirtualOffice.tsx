@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import Image from 'next/image';
 import Avatar from './Avatar';
 import Chat from './Chat';
@@ -64,7 +64,40 @@ export default function VirtualOffice() {
     voiceEnabled: false
   });
 
+  // Movement state
+  const [isMoving, setIsMoving] = useState(false);
+  const [targetPosition, setTargetPosition] = useState<{x: number, y: number} | null>(null);
+  const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set());
+
   // Voice proximity hook
+  // Room-based voice chat system
+  const getRoomFromPosition = useCallback((x: number): number => {
+    // Divide office into 3 equal vertical slices with more precise boundaries
+    if (x < 33.33) return 1; // Left room
+    if (x < 66.66) return 2; // Middle room
+    return 3; // Right room
+  }, []);
+
+  const currentRoom = useMemo(() => getRoomFromPosition(me.x), [me.x, getRoomFromPosition]);
+  const [previousRoom, setPreviousRoom] = useState(currentRoom);
+
+  // Get users in the same room - memoize with specific dependencies
+  const usersInCurrentRoom = useMemo(() => {
+    return users.filter(user => {
+      const userRoom = getRoomFromPosition(user.x);
+      return userRoom === currentRoom && user.voiceEnabled;
+    });
+  }, [users, currentRoom, getRoomFromPosition]);
+
+  // Memoize users array for voice proximity (now room-based)
+  const stableUsers = useMemo(() => 
+    usersInCurrentRoom.map(u => ({ ...u, voiceEnabled: u.voiceEnabled || false })), 
+    [usersInCurrentRoom]
+  );
+
+  // Memoize current user to prevent infinite loops
+  const stableCurrentUser = useMemo(() => ({ ...me }), [me.id, me.x, me.y, me.socketId]);
+
   const {
     isVoiceEnabled,
     isMuted,
@@ -75,14 +108,113 @@ export default function VirtualOffice() {
     proximityThreshold
   } = useVoiceProximity({
     socket,
-    currentUser: me,
-    users: users.map(u => ({ ...u, voiceEnabled: u.voiceEnabled || false })),
-    proximityThreshold: 25,
-    maxDistance: 50
+    currentUser: stableCurrentUser,
+    users: stableUsers,
+    proximityThreshold: 100, // Large threshold - everyone in same room can talk
+    maxDistance: 200 // Large max distance
   });
 
+  // Simple room tracking - just update the previous room
+  useEffect(() => {
+    if (currentRoom !== previousRoom) {
+      console.log(`Moved to Room ${currentRoom}`);
+      setPreviousRoom(currentRoom);
+    }
+  }, [currentRoom, previousRoom]);
+
+  // WASD keyboard movement
+  useEffect(() => {
+    const isInputFocused = () => {
+      const activeElement = document.activeElement;
+      return activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.getAttribute('contenteditable') === 'true'
+      );
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd'].includes(key) && !isInputFocused()) {
+        e.preventDefault();
+        setKeysPressed(prev => new Set(prev).add(key));
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const key = e.key.toLowerCase();
+      if (['w', 'a', 's', 'd'].includes(key) && !isInputFocused()) {
+        e.preventDefault();
+        setKeysPressed(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(key);
+          return newSet;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
+
+  // Handle WASD movement
+  useEffect(() => {
+    if (!isConnected || keysPressed.size === 0) return;
+
+    const moveSpeed = 0.8; // Movement speed (percentage per frame)
+    let lastSocketUpdate = 0;
+    const socketUpdateInterval = 100; // Only send to socket every 100ms
+    let animationFrame: number;
+
+    const updateMovement = () => {
+      const currentTime = Date.now();
+      
+      setMe(prev => {
+        let newX = prev.x;
+        let newY = prev.y;
+
+        // Apply movement based on pressed keys
+        if (keysPressed.has('w')) newY = Math.max(0, newY - moveSpeed);
+        if (keysPressed.has('s')) newY = Math.min(100, newY + moveSpeed);
+        if (keysPressed.has('a')) newX = Math.max(0, newX - moveSpeed);
+        if (keysPressed.has('d')) newX = Math.min(100, newX + moveSpeed);
+
+        // Only update if position changed
+        if (newX !== prev.x || newY !== prev.y) {
+          // Send to socket less frequently to reduce network load
+          if (socket && currentTime - lastSocketUpdate > socketUpdateInterval) {
+            socket.emit('user:move', { x: newX, y: newY });
+            lastSocketUpdate = currentTime;
+          }
+          
+          return { ...prev, x: newX, y: newY };
+        }
+        
+        return prev;
+      });
+
+      // Continue animation if keys are still pressed
+      if (keysPressed.size > 0) {
+        animationFrame = requestAnimationFrame(updateMovement);
+      }
+    };
+
+    animationFrame = requestAnimationFrame(updateMovement);
+
+    return () => {
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+    };
+  }, [keysPressed, isConnected, socket]);
+
   // Handle login
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (userName.trim()) {
       const fullAvatarSeed = `${selectedStyle}-${avatarSeed}`;
@@ -95,10 +227,10 @@ export default function VirtualOffice() {
       setIsLoggedIn(true);
       setIsConnected(true);
     }
-  };
+  }, [userName, selectedStyle, avatarSeed]);
 
   // Handle possum click effect
-  const handlePossumClick = (e: React.MouseEvent<HTMLImageElement>) => {
+  const handlePossumClick = useCallback((e: React.MouseEvent<HTMLImageElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
@@ -116,7 +248,7 @@ export default function VirtualOffice() {
     setTimeout(() => {
       setPossumSparkles([]);
     }, 1000);
-  };
+  }, []);
 
   // Socket connection
   useEffect(() => {
@@ -183,25 +315,42 @@ export default function VirtualOffice() {
         setSocket(null);
       }
     };
-  }, [isConnected, socket, me.id, me.avatarSeed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isConnected, socket]); // Simplified dependencies
 
   // Handle office click for movement
-  const handleOfficeClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isConnected || !officeRef.current) return;
+  const handleOfficeClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isConnected || !officeRef.current || isMoving) return;
 
     const rect = officeRef.current.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * 100;
     const y = ((e.clientY - rect.top) / rect.height) * 100;
 
+    // Set movement state
+    setIsMoving(true);
+    setTargetPosition({ x, y });
+    
+    // Start movement
     setMe(prev => ({ ...prev, x, y }));
     
+    // Send to socket immediately
     if (socket) {
       socket.emit('user:move', { x, y });
     }
-  };
+
+    // Reset movement state after animation completes
+    setTimeout(() => {
+      setIsMoving(false);
+      setTargetPosition(null);
+    }, 800); // Match the CSS transition duration
+  }, [isConnected, isMoving, socket]);
 
   // Handle leave office
-  const handleLeaveOffice = () => {
+  const handleLeaveOffice = useCallback(() => {
+    // Turn off voice chat if enabled
+    if (isVoiceEnabled) {
+      toggleVoice();
+    }
+    
     setIsConnected(false);
     setIsLoggedIn(false);
     if (socket) {
@@ -211,17 +360,26 @@ export default function VirtualOffice() {
     setUsers([]);
     setUserName('');
     setAvatarSeed(Math.random().toString());
-  };
+    
+    // Reset avatar settings to defaults
+    setMe(prev => ({
+      ...prev,
+      x: 50,
+      y: 80,
+      status: 'available',
+      voiceEnabled: false
+    }));
+  }, [isVoiceEnabled, toggleVoice, socket, setUsers]);
 
   // Update status
-  const handleStatusChange = (newStatus: string) => {
+  const handleStatusChange = useCallback((newStatus: string) => {
     setStatus(newStatus);
     setMe(prev => ({ ...prev, status: newStatus }));
     
     if (socket && isConnected) {
       socket.emit('user:status', newStatus);
     }
-  };
+  }, [socket, isConnected]);
 
   // Show login screen if not logged in
   if (!isLoggedIn) {
@@ -685,6 +843,79 @@ export default function VirtualOffice() {
               transform: translateX(0) scale(1); 
             }
           }
+          
+          /* Proximity Chat Ripple Animations - Start from Avatar */
+          @keyframes ripple-from-avatar-idle {
+            0% { 
+              transform: translate(-50%, -50%) scale(1); 
+              opacity: 0.7; 
+            }
+            100% { 
+              transform: translate(-50%, -50%) scale(10); 
+              opacity: 0; 
+            }
+          }
+          
+          @keyframes ripple-from-avatar-active {
+            0% { 
+              transform: translate(-50%, -50%) scale(1); 
+              opacity: 0.9; 
+            }
+            100% { 
+              transform: translate(-50%, -50%) scale(10); 
+              opacity: 0; 
+            }
+          }
+          
+          @keyframes ripple-blue-from-avatar-idle {
+            0% { 
+              transform: translate(-50%, -50%) scale(1); 
+              opacity: 0.5; 
+            }
+            100% { 
+              transform: translate(-50%, -50%) scale(10); 
+              opacity: 0; 
+            }
+          }
+          
+          @keyframes ripple-blue-from-avatar-active {
+            0% { 
+              transform: translate(-50%, -50%) scale(1); 
+              opacity: 0.7; 
+            }
+            100% { 
+              transform: translate(-50%, -50%) scale(10); 
+              opacity: 0; 
+            }
+          }
+          
+          @keyframes text-glow {
+            0%, 100% { 
+              color: #10b981; 
+              text-shadow: 0 0 5px rgba(16, 185, 129, 0.3); 
+            }
+            50% { 
+              color: #059669; 
+              text-shadow: 0 0 10px rgba(16, 185, 129, 0.6); 
+            }
+                      }
+          
+          /* Movement Target Animation */
+          @keyframes target-pulse {
+            0% { 
+              transform: translate(-50%, -50%) scale(0.5); 
+              opacity: 0; 
+            }
+            20% { 
+              transform: translate(-50%, -50%) scale(1.2); 
+              opacity: 0.8; 
+            }
+            100% { 
+              transform: translate(-50%, -50%) scale(1); 
+              opacity: 0.3; 
+            }
+          }
+          
           @media (max-width: 1024px) {
             .office-main-layout {
               grid-template-columns: 1fr !important;
@@ -855,6 +1086,7 @@ export default function VirtualOffice() {
                     {isMuted ? <MicOff size={16} /> : <Mic size={16} />}
                   </button>
                 )}
+
               </div>
               <select 
                 value={status} 
@@ -940,7 +1172,7 @@ export default function VirtualOffice() {
                 position: 'relative',
                 borderRadius: '20px',
                 overflow: 'hidden',
-                cursor: 'pointer',
+                cursor: isMoving ? 'wait' : 'crosshair',
                 boxShadow: '0 15px 35px rgba(0, 0, 0, 0.1)',
                 transition: 'all 0.3s ease'
               }}
@@ -967,6 +1199,81 @@ export default function VirtualOffice() {
                 priority
               />
               
+              {/* Room boundary lines */}
+              <div style={{
+                position: 'absolute',
+                left: '33.33%',
+                top: '0',
+                width: '2px',
+                height: '100%',
+                background: 'rgba(102, 126, 234, 0.3)',
+                zIndex: 1,
+                pointerEvents: 'none'
+              }} />
+              <div style={{
+                position: 'absolute',
+                left: '66.66%',
+                top: '0',
+                width: '2px',
+                height: '100%',
+                background: 'rgba(102, 126, 234, 0.3)',
+                zIndex: 1,
+                pointerEvents: 'none'
+              }} />
+              
+              {/* Room labels */}
+              <div style={{
+                position: 'absolute',
+                left: '16.66%',
+                top: '10px',
+                transform: 'translateX(-50%)',
+                background: 'rgba(102, 126, 234, 0.9)',
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '600',
+                zIndex: 2,
+                pointerEvents: 'none'
+              }}>
+                Room 1
+              </div>
+              <div style={{
+                position: 'absolute',
+                left: '50%',
+                top: '10px',
+                transform: 'translateX(-50%)',
+                background: 'rgba(102, 126, 234, 0.9)',
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '600',
+                zIndex: 2,
+                pointerEvents: 'none'
+              }}>
+                Room 2
+              </div>
+              <div style={{
+                position: 'absolute',
+                left: '83.33%',
+                top: '10px',
+                transform: 'translateX(-50%)',
+                background: 'rgba(102, 126, 234, 0.9)',
+                color: 'white',
+                padding: '4px 8px',
+                borderRadius: '8px',
+                fontSize: '12px',
+                fontWeight: '600',
+                zIndex: 2,
+                pointerEvents: 'none'
+              }}>
+                Room 3
+              </div>
+              
+
+
+
               {/* Render my avatar */}
               <Avatar
                 id={me.id}
@@ -980,16 +1287,48 @@ export default function VirtualOffice() {
 
               {/* Render other users */}
               {users.map((user) => (
-                <Avatar
-                  key={user.socketId || user.id}
-                  id={user.id}
-                  name={user.name}
-                  x={user.x}
-                  y={user.y}
-                  status={user.status}
-                  avatarSeed={user.avatarSeed}
-                  isMe={false}
-                />
+                <div key={user.socketId || user.id}>
+                  {/* Other user's voice proximity indicator */}
+                  {user.voiceEnabled && (
+                    <div style={{
+                      position: 'absolute',
+                      left: `${user.x}%`,
+                      top: `${user.y}%`,
+                      transform: 'translate(-50%, -50%)',
+                      width: `${proximityThreshold * 0.6}%`,
+                      aspectRatio: '1',
+                      pointerEvents: 'none',
+                      zIndex: 0
+                    }}>
+
+                      
+                      {/* Ripple for other users - starts from avatar */}
+                      <div style={{
+                        position: 'absolute',
+                        top: '50%',
+                        left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '10%',
+                        height: '10%',
+                        borderRadius: '50%',
+                        border: 'none',
+                        animation: usersInRange.includes(user.socketId || user.id)
+                          ? 'ripple-blue-from-avatar-active 1.2s ease-out infinite'
+                          : 'ripple-blue-from-avatar-idle 2.5s ease-out infinite'
+                      }} />
+                    </div>
+                  )}
+                  
+                  <Avatar
+                    id={user.id}
+                    name={user.name}
+                    x={user.x}
+                    y={user.y}
+                    status={user.status}
+                    avatarSeed={user.avatarSeed}
+                    isMe={false}
+                  />
+                </div>
               ))}
 
               {/* Voice proximity indicator */}
@@ -999,48 +1338,61 @@ export default function VirtualOffice() {
                   left: `${me.x}%`,
                   top: `${me.y}%`,
                   transform: 'translate(-50%, -50%)',
-                  width: `${proximityThreshold * 2}%`,
-                  height: `${proximityThreshold * 2}%`,
-                  borderRadius: '50%',
-                  border: '2px dashed rgba(16, 185, 129, 0.4)',
-                  background: 'rgba(16, 185, 129, 0.05)',
+                  width: `${proximityThreshold * 0.6}%`,
+                  aspectRatio: '1',
                   pointerEvents: 'none',
-                  zIndex: 1,
-                  animation: 'gentle-pulse 3s ease-in-out infinite'
-                }}
-                />
+                  zIndex: 1
+                }}>
+
+                  
+                  {/* Expanding ripple circles - start from avatar and expand outward */}
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '10%',
+                    height: '10%',
+                    borderRadius: '50%',
+                    border: 'none',
+                    animation: usersInRange.length > 0 
+                      ? 'ripple-from-avatar-active 1.2s ease-out infinite' 
+                      : 'ripple-from-avatar-idle 2.5s ease-out infinite'
+                  }} />
+                  
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '10%',
+                    height: '10%',
+                    borderRadius: '50%',
+                    border: 'none',
+                    animation: usersInRange.length > 0 
+                      ? 'ripple-from-avatar-active 1.2s ease-out infinite 0.4s' 
+                      : 'ripple-from-avatar-idle 2.5s ease-out infinite 0.8s'
+                  }} />
+                  
+                  <div style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: '10%',
+                    height: '10%',
+                    borderRadius: '50%',
+                    border: 'none',
+                    animation: usersInRange.length > 0 
+                      ? 'ripple-from-avatar-active 1.2s ease-out infinite 0.8s' 
+                      : 'ripple-from-avatar-idle 2.5s ease-out infinite 1.6s'
+                  }} />
+                  
+
+                </div>
               )}
 
-              {/* Connection indicator */}
-              <div style={{
-                position: 'absolute',
-                top: '20px',
-                left: '20px',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: 'white',
-                padding: '8px 16px',
-                borderRadius: '20px',
-                fontSize: '14px',
-                fontWeight: '600',
-                boxShadow: '0 8px 25px rgba(16, 185, 129, 0.4)',
-                backdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255, 255, 255, 0.2)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                Connected as {me.name}
-                {isVoiceEnabled && (
-                  <span style={{
-                    fontSize: '12px',
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    padding: '2px 6px',
-                    borderRadius: '8px'
-                  }}>
-                    🎤 Voice Active
-                  </span>
-                )}
-              </div>
+
             </div>
             <div style={{
               fontSize: '14px',
@@ -1052,14 +1404,24 @@ export default function VirtualOffice() {
               flexDirection: 'column',
               gap: '5px'
             }}>
-              <p style={{ margin: 0 }}>✨ Click anywhere on the floor to move around the office</p>
-              {isVoiceEnabled && (
+              <p style={{ margin: 0 }}>✨ Click anywhere or use WASD keys to move around</p>
+              <p style={{ margin: 0 }}>🏢 Office is divided into 3 rooms for voice chat</p>
+              {isMoving && (
                 <p style={{ 
                   margin: 0,
-                  color: 'rgba(16, 185, 129, 0.8)',
+                  color: 'rgba(102, 126, 234, 0.8)',
                   fontSize: '13px'
                 }}>
-                  🎤 Voice chat active - get close to others to talk!
+                  🚶‍♂️ Moving to new location...
+                </p>
+              )}
+              {isVoiceEnabled && !isMoving && (
+                <p style={{ 
+                  margin: 0,
+                  color: currentRoom === 1 ? '#10b981' : currentRoom === 2 ? '#3b82f6' : '#f59e0b',
+                  fontSize: '13px'
+                }}>
+                  🎤 Voice active in Room {currentRoom} - {usersInCurrentRoom.length} others here
                 </p>
               )}
             </div>
@@ -1129,7 +1491,7 @@ export default function VirtualOffice() {
                         width: '12px',
                         height: '12px',
                         borderRadius: '50%',
-                        background: isMuted ? '#ef4444' : '#10b981',
+                        background: '#10b981',
                         border: '2px solid white',
                         fontSize: '8px',
                         display: 'flex',

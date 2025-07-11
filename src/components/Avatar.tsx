@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 interface AvatarProps {
     id: string;
@@ -11,6 +11,7 @@ interface AvatarProps {
   }
   
   export default function Avatar({ id, name, x, y, status, avatarSeed, isMe = false }: AvatarProps) {
+    const [isHovered, setIsHovered] = useState(false);
     const statusColors = {
       available: '#10b981',
       busy: '#ef4444',
@@ -30,19 +31,26 @@ interface AvatarProps {
   
     return (
       <div
-        className="absolute transition-all duration-300 ease-out"
+        className="absolute"
         style={{
           left: `${x}%`,
           top: `${y}%`,
           transform: 'translate(-50%, -50%)',
-          zIndex: isMe ? 20 : 10
+          zIndex: isMe ? 20 : 10,
+          transition: 'left 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), top 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
       >
         {/* Avatar Circle */}
         <div className="relative">
           <div 
-            className={`rounded-full ${isMe ? 'ring-2 ring-blue-500' : ''} bg-white border-2 border-gray-200`}
-            style={{ width: '24px', height: '24px' }}
+            className="rounded-full bg-white cursor-pointer"
+            style={{ 
+              width: '32px', 
+              height: '32px',
+              border: '1px solid rgba(0, 0, 0, 0.2)'
+            }}
           >
             <img
               src={getAvatarUrl()}
@@ -56,11 +64,11 @@ interface AvatarProps {
           <svg 
             className="absolute"
             style={{
-              bottom: '1px',
-              left: '1px',
+              bottom: '3px',
+              left: '3px',
               transform: 'translate(-50%, 50%)',
-              width: '10px',
-              height: '10px'
+              width: '12px',
+              height: '12px'
             }}
             viewBox="0 0 12 12"
           >
@@ -75,10 +83,12 @@ interface AvatarProps {
           </svg>
         </div>
         
-        {/* Name Tag */}
-        <div className="absolute top-full mt-1 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded whitespace-nowrap">
-          {name} {isMe && '(You)'}
-        </div>
+        {/* Hover Name Tag */}
+        {isHovered && (
+          <div className="absolute top-full mt-1 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">
+            {name} {isMe && '(You)'}
+          </div>
+        )}
       </div>
     );
   }
