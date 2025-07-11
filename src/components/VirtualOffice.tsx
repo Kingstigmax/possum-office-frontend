@@ -1405,7 +1405,7 @@ export default function VirtualOffice() {
             }}>
               <Chat
                 socket={socket}
-                currentUserId={me.id}
+                currentUserId={socket?.id || me.id}
                 currentUserName={me.name}
               />
             </div>
