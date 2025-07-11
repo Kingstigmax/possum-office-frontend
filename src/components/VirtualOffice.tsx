@@ -666,6 +666,7 @@ export default function VirtualOffice() {
                     position: 'relative',
                     boxShadow: '0 10px 30px rgba(102, 126, 234, 0.3)'
                   }}
+                  unoptimized
                 />
               </div>
             </div>
@@ -1484,6 +1485,7 @@ export default function VirtualOffice() {
                         border: '2px solid #667eea',
                         background: 'white'
                       }}
+                      unoptimized
                     />
                     {isVoiceEnabled && (
                       <div style={{
@@ -1592,6 +1594,7 @@ export default function VirtualOffice() {
                             background: 'white',
                             animation: isUserSpeaking ? 'pulse 1s infinite' : 'none'
                           }}
+                          unoptimized
                         />
                         {user.voiceEnabled && (
                           <div style={{
