@@ -13,6 +13,7 @@ interface AvatarProps {
     isInVoiceRange?: boolean;
     isSpeaking?: boolean;
     voiceEnabled?: boolean;
+    isMuted?: boolean;
   }
   
   export default function Avatar({ 
@@ -26,7 +27,8 @@ interface AvatarProps {
     isMoving = false,
     isInVoiceRange = false,
     isSpeaking = false,
-    voiceEnabled = false
+    voiceEnabled = false,
+    isMuted = false
   }: AvatarProps) {
     const [isHovered, setIsHovered] = useState(false);
     const [ghostTrail, setGhostTrail] = useState<Array<{x: number, y: number, id: number, opacity: number}>>([]);
@@ -35,6 +37,8 @@ interface AvatarProps {
     const [previousY, setPreviousY] = useState(y);
     const animationRef = useRef<number | null>(null);
     const trailUpdateRef = useRef<NodeJS.Timeout | null>(null);
+    const [imageError, setImageError] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     
     const statusColors = {
       available: '#10b981',
@@ -43,14 +47,53 @@ interface AvatarProps {
       away: '#6b7280'
     };
   
+    // Generate a simple data URI avatar as final fallback
+    const generateDataUriAvatar = () => {
+      const initials = name ? name.substring(0, 2).toUpperCase() : 'XX';
+      const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+      const bgColor = colors[Math.abs(name.charCodeAt(0) || 0) % colors.length];
+      
+      const svg = `
+        <svg width="128" height="128" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="64" cy="64" r="64" fill="${bgColor}"/>
+          <text x="64" y="80" font-family="Arial, sans-serif" font-size="48" font-weight="bold" 
+                text-anchor="middle" fill="white">${initials}</text>
+        </svg>
+      `;
+      
+      return `data:image/svg+xml;base64,${btoa(svg)}`;
+    };
+
     // Parse avatar style from seed
     const getAvatarUrl = () => {
+      if (imageError) {
+        // Try ui-avatars first, then data URI as final fallback
+        try {
+          return `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=random&color=fff&size=128&rounded=true&format=svg`;
+        } catch {
+          return generateDataUriAvatar();
+        }
+      }
+      
       if (avatarSeed && avatarSeed.includes('-')) {
         const [style, seed] = avatarSeed.split('-');
         return `https://api.dicebear.com/7.x/${style.toLowerCase()}/svg?seed=${seed}`;
       }
       // Fallback to original
       return `https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`;
+    };
+
+    // Handle image loading errors
+    const handleImageError = () => {
+      console.warn(`Avatar image failed to load for ${name}:`, getAvatarUrl());
+      setImageError(true);
+      setIsLoading(false);
+    };
+
+    // Handle image loading success
+    const handleImageLoad = () => {
+      setIsLoading(false);
+      setImageError(false);
     };
 
 
@@ -221,17 +264,38 @@ interface AvatarProps {
               transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
               background: isMe 
                 ? 'linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%)'
-                : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)'
+                : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
             }}
           >
+            {isLoading && (
+              <div style={{
+                width: '16px',
+                height: '16px',
+                border: '2px solid rgba(59, 130, 246, 0.3)',
+                borderTop: '2px solid rgba(59, 130, 246, 0.8)',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }}></div>
+            )}
             <Image
               src={getAvatarUrl()}
               alt={name}
               className="rounded-full"
               width={32}
               height={32}
-              style={{ width: '100%', height: '100%' }}
+              style={{ 
+                width: '100%', 
+                height: '100%',
+                opacity: isLoading ? 0 : 1,
+                transition: 'opacity 0.3s ease'
+              }}
               unoptimized
+              onLoad={handleImageLoad}
+              onError={handleImageError}
+              priority={isMe}
             />
           </div>
 
@@ -253,7 +317,7 @@ interface AvatarProps {
           />
 
           {/* Voice Status Indicator */}
-          {voiceEnabled && (
+          {voiceEnabled && !isMuted && (
             <div
               style={{
                 position: 'absolute',
@@ -356,6 +420,11 @@ interface AvatarProps {
           @keyframes nameTagAppear {
             0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
             100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          }
+          
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
           }
         `}</style>
       </div>

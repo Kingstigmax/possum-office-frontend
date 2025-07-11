@@ -177,40 +177,82 @@ export default function VirtualOffice() {
   }, [isCameraOn, socket, isConnected, me.id]);
 
   // WebRTC peer connection functions
-  const createPeerConnection = useCallback(() => {
+  const createPeerConnection = useCallback((partnerId: string) => {
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' }
+      ],
+      // Force relay for localhost testing
+      iceCandidatePoolSize: 10
     });
 
     pc.onicecandidate = (event) => {
-      if (event.candidate && socket && videoHuddlePartner) {
+      console.log('ICE candidate event:', event.candidate);
+      if (event.candidate && socket) {
+        console.log('Sending ICE candidate to', partnerId, event.candidate);
         socket.emit('video:ice-candidate', {
-          to: videoHuddlePartner,
+          to: partnerId,
           candidate: event.candidate
         });
+      } else {
+        console.log('ICE gathering complete');
       }
     };
 
     pc.ontrack = (event) => {
-      console.log('Received remote video stream');
-      setRemoteVideoStream(event.streams[0]);
-      if (remoteVideoRef) {
-        remoteVideoRef.srcObject = event.streams[0];
+      console.log('Received remote video stream from', partnerId, event.streams);
+      const stream = event.streams[0];
+      setRemoteVideoStream(stream);
+      
+      // Set stream on video element immediately and with timeout as backup
+      const videoElement = document.querySelector('#remote-video') as HTMLVideoElement;
+      if (videoElement && stream) {
+        videoElement.srcObject = stream;
+        console.log('Remote video stream attached to element immediately');
+      }
+      
+      // Backup attempt
+      setTimeout(() => {
+        const videoElementBackup = document.querySelector('#remote-video') as HTMLVideoElement;
+        if (videoElementBackup && stream && !videoElementBackup.srcObject) {
+          videoElementBackup.srcObject = stream;
+          console.log('Remote video stream attached to element (backup)');
+        }
+      }, 100);
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log('Peer connection state:', pc.connectionState);
+      if (pc.connectionState === 'failed') {
+        console.error('WebRTC connection failed!');
+        setVideoError('Connection failed - trying to reconnect...');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log('ICE connection state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        console.error('ICE connection failed!');
+        setVideoError('Network connection failed');
+      } else if (pc.iceConnectionState === 'connected') {
+        console.log('ICE connection established!');
+        setVideoError(null);
       }
     };
 
     return pc;
-  }, [socket, videoHuddlePartner, remoteVideoRef]);
+  }, [socket]);
 
   // Start video huddle
   const startVideoHuddle = useCallback(async (partnerId: string, partnerName: string) => {
     if (!isCameraOn || !localVideoStream || !socket) return;
 
     try {
-      const pc = createPeerConnection();
+      const pc = createPeerConnection(partnerId);
       setPeerConnection(pc);
 
       // Add local stream to peer connection
@@ -244,28 +286,21 @@ export default function VirtualOffice() {
     if (!isCameraOn || !localVideoStream || !socket) return;
 
     try {
-      const pc = createPeerConnection();
-      setPeerConnection(pc);
-
-      // Add local stream to peer connection
-      localVideoStream.getTracks().forEach(track => {
-        pc.addTrack(track, localVideoStream);
-      });
-
+      // DON'T create peer connection here - wait for offer
       setIsInVideoHuddle(true);
       setVideoHuddlePartner(partnerId);
       setVideoHuddlePartnerName(partnerName);
       setVideoInvitation(null);
 
-      // Accept the invitation
+      // Accept the invitation - this will trigger the original inviter to send an offer
       socket.emit('video:accept', { to: partnerId });
       
-      console.log('Video huddle accepted with', partnerName);
+      console.log('Video huddle accepted with', partnerName, '- waiting for offer...');
     } catch (error) {
       console.error('Error accepting video huddle:', error);
       setVideoError('Failed to accept video huddle');
     }
-  }, [isCameraOn, localVideoStream, socket, createPeerConnection]);
+  }, [isCameraOn, localVideoStream, socket]);
 
   // Reject video huddle invitation
   const rejectVideoHuddle = useCallback((partnerId: string) => {
@@ -686,16 +721,63 @@ export default function VirtualOffice() {
         from: string;
         offer: RTCSessionDescriptionInit;
       }) => {
-        console.log('Received video offer from', data.from);
-        if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await peerConnection.createAnswer();
-          await peerConnection.setLocalDescription(answer);
+        console.log('🎥 Received video offer from', data.from, data.offer);
+        
+        // Create peer connection when receiving offer (for the person who accepted)
+        if (!peerConnection && localVideoStream) {
+          console.log('🔧 Creating peer connection for incoming offer');
+          const pc = createPeerConnection(data.from);
+          setPeerConnection(pc);
           
-          newSocket.emit('video:answer', {
-            to: data.from,
-            answer: answer
+          // Add local stream to peer connection
+          console.log('📹 Adding local video tracks to peer connection');
+          localVideoStream.getTracks().forEach(track => {
+            console.log('Adding track:', track.kind, track.enabled);
+            pc.addTrack(track, localVideoStream);
           });
+          
+          // Handle the offer
+          try {
+            console.log('📨 Setting remote description from offer');
+            await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+            console.log('✅ Remote description set successfully');
+            
+            console.log('📤 Creating answer');
+            const answer = await pc.createAnswer();
+            console.log('✅ Answer created:', answer);
+            
+            console.log('📝 Setting local description');
+            await pc.setLocalDescription(answer);
+            console.log('✅ Local description set');
+            
+            newSocket.emit('video:answer', {
+              to: data.from,
+              answer: answer
+            });
+            console.log('📨 Sent video answer to', data.from);
+          } catch (error) {
+            console.error('❌ Error handling video offer:', error);
+            setVideoError(`Offer handling failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        } else if (peerConnection) {
+          console.log('🔄 Using existing peer connection for offer');
+          // Handle offer if peer connection already exists
+          try {
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.offer));
+            const answer = await peerConnection.createAnswer();
+            await peerConnection.setLocalDescription(answer);
+            
+            newSocket.emit('video:answer', {
+              to: data.from,
+              answer: answer
+            });
+            console.log('Sent video answer to', data.from);
+          } catch (error) {
+            console.error('Error handling video offer:', error);
+          }
+        } else {
+          console.error('❌ No local video stream available for offer!');
+          setVideoError('Camera not ready - please try again');
         }
       });
 
@@ -703,9 +785,18 @@ export default function VirtualOffice() {
         from: string;
         answer: RTCSessionDescriptionInit;
       }) => {
-        console.log('Received video answer from', data.from);
+        console.log('🎥 Received video answer from', data.from, data.answer);
         if (peerConnection) {
-          await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+          try {
+            console.log('📝 Setting remote description from answer');
+            await peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer));
+            console.log('✅ Remote description set from answer');
+          } catch (error) {
+            console.error('❌ Error handling video answer:', error);
+            setVideoError(`Answer handling failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        } else {
+          console.error('❌ No peer connection available for answer!');
         }
       });
 
@@ -713,9 +804,16 @@ export default function VirtualOffice() {
         from: string;
         candidate: RTCIceCandidateInit;
       }) => {
-        console.log('Received ICE candidate from', data.from);
+        console.log('🧊 Received ICE candidate from', data.from, data.candidate);
         if (peerConnection) {
-          await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+          try {
+            await peerConnection.addIceCandidate(new RTCIceCandidate(data.candidate));
+            console.log('✅ ICE candidate added successfully');
+          } catch (error) {
+            console.error('❌ Error adding ICE candidate:', error);
+          }
+        } else {
+          console.error('❌ No peer connection available for ICE candidate!');
         }
       });
 
@@ -3139,6 +3237,7 @@ export default function VirtualOffice() {
                 isInVoiceRange={usersInRange.length > 0}
                 isSpeaking={false}
                 voiceEnabled={isVoiceEnabled}
+                isMuted={isMuted}
               />
 
               {/* Render other users */}
@@ -3187,6 +3286,7 @@ export default function VirtualOffice() {
                     isInVoiceRange={usersInRange.includes(user.socketId || user.id)}
                     isSpeaking={speakingUsers.has(user.socketId || user.id)}
                     voiceEnabled={user.voiceEnabled || false}
+                    isMuted={false}
                   />
                 </div>
               ))}
@@ -3448,6 +3548,7 @@ export default function VirtualOffice() {
                   }}>
                     {remoteVideoStream ? (
                       <video
+                        id="remote-video"
                         ref={(ref) => {
                           setRemoteVideoRef(ref);
                           if (ref && remoteVideoStream) {
