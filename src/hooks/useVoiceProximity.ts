@@ -243,7 +243,7 @@ export function useVoiceProximity({
     };
 
     return peerConnection;
-  }, [socket]);
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Start voice connection with a user
   const startVoiceConnection = useCallback(async (targetUserId: string) => {
@@ -277,7 +277,7 @@ export function useVoiceProximity({
     } catch (error) {
       console.error('Error starting voice connection:', error);
     }
-  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socket, createPeerConnection, voiceConnections]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle incoming voice offer
   const handleVoiceOffer = useCallback(async (data: { from: string; offer: RTCSessionDescriptionInit }) => {

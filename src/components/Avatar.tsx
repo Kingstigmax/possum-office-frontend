@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Image from 'next/image';
 
 interface AvatarProps {
     id: string;
@@ -52,10 +53,12 @@ interface AvatarProps {
               border: '1px solid rgba(0, 0, 0, 0.2)'
             }}
           >
-            <img
+            <Image
               src={getAvatarUrl()}
               alt={name}
               className="rounded-full"
+              width={32}
+              height={32}
               style={{ width: '100%', height: '100%' }}
             />
           </div>

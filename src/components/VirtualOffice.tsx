@@ -66,7 +66,6 @@ export default function VirtualOffice() {
 
   // Movement state
   const [isMoving, setIsMoving] = useState(false);
-  const [targetPosition, setTargetPosition] = useState<{x: number, y: number} | null>(null);
   const [keysPressed, setKeysPressed] = useState<Set<string>>(new Set());
 
   // Voice proximity hook
@@ -96,7 +95,7 @@ export default function VirtualOffice() {
   );
 
   // Memoize current user to prevent infinite loops
-  const stableCurrentUser = useMemo(() => ({ ...me }), [me.id, me.x, me.y, me.socketId]);
+  const stableCurrentUser = useMemo(() => ({ ...me }), [me]);
 
   const {
     isVoiceEnabled,
@@ -315,7 +314,8 @@ export default function VirtualOffice() {
         setSocket(null);
       }
     };
-  }, [isConnected, socket]); // Simplified dependencies
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isConnected, socket]); // Zustand store functions are stable and don't need to be in dependencies
 
   // Handle office click for movement
   const handleOfficeClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -327,7 +327,6 @@ export default function VirtualOffice() {
 
     // Set movement state
     setIsMoving(true);
-    setTargetPosition({ x, y });
     
     // Start movement
     setMe(prev => ({ ...prev, x, y }));
@@ -340,7 +339,6 @@ export default function VirtualOffice() {
     // Reset movement state after animation completes
     setTimeout(() => {
       setIsMoving(false);
-      setTargetPosition(null);
     }, 800); // Match the CSS transition duration
   }, [isConnected, isMoving, socket]);
 
@@ -654,9 +652,11 @@ export default function VirtualOffice() {
                   filter: 'blur(20px)',
                   animation: 'pulse 3s ease-in-out infinite'
                 }}></div>
-                <img
+                <Image
                   src={`https://api.dicebear.com/7.x/${selectedStyle.toLowerCase()}/svg?seed=${avatarSeed}`}
                   alt="Avatar preview"
+                  width={150}
+                  height={150}
                   style={{
                     width: '150px',
                     height: '150px',
@@ -1472,9 +1472,11 @@ export default function VirtualOffice() {
                   position: 'relative'
                 }}>
                   <div style={{ position: 'relative' }}>
-                    <img
+                    <Image
                       src={`https://api.dicebear.com/7.x/${me.avatarSeed?.split('-')[0].toLowerCase()}/svg?seed=${me.avatarSeed?.split('-')[1]}`}
                       alt={me.name}
+                      width={32}
+                      height={32}
                       style={{ 
                         width: '32px', 
                         height: '32px',
@@ -1572,12 +1574,14 @@ export default function VirtualOffice() {
                       }}
                     >
                       <div style={{ position: 'relative' }}>
-                        <img
+                        <Image
                           src={user.avatarSeed ? 
                             `https://api.dicebear.com/7.x/${user.avatarSeed.split('-')[0].toLowerCase()}/svg?seed=${user.avatarSeed.split('-')[1]}` :
                             `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.id}`
                           }
                           alt={user.name}
+                          width={32}
+                          height={32}
                           style={{ 
                             width: '32px', 
                             height: '32px',
