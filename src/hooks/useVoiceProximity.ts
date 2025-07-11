@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Socket } from 'socket.io-client';
 
+// Extend Window interface to include webkitAudioContext
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 interface User {
   id: string;
   socketId?: string;
@@ -126,7 +133,7 @@ export function useVoiceProximity({
       
       try {
         if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext || AudioContext)();
         }
         
         // Resume audio context if suspended
@@ -270,7 +277,7 @@ export function useVoiceProximity({
     } catch (error) {
       console.error('Error starting voice connection:', error);
     }
-  }, [socket]); // Removed createPeerConnection to prevent infinite loops
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle incoming voice offer
   const handleVoiceOffer = useCallback(async (data: { from: string; offer: RTCSessionDescriptionInit }) => {
@@ -306,7 +313,7 @@ export function useVoiceProximity({
     } catch (error) {
       console.error('Error handling voice offer:', error);
     }
-  }, [socket]); // Removed createPeerConnection to prevent infinite loops
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle incoming voice answer
   const handleVoiceAnswer = useCallback(async (data: { from: string; answer: RTCSessionDescriptionInit }) => {
@@ -323,7 +330,7 @@ export function useVoiceProximity({
     } catch (error) {
       console.error('Error handling voice answer:', error);
     }
-  }, []); // Removed voiceConnections dependency to prevent infinite loops
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle ICE candidate
   const handleIceCandidate = useCallback(async (data: { from: string; candidate: RTCIceCandidateInit }) => {
@@ -340,7 +347,7 @@ export function useVoiceProximity({
     } catch (error) {
       console.error('Error handling ICE candidate:', error);
     }
-  }, []); // Removed voiceConnections dependency to prevent infinite loops
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Toggle voice chat
   const toggleVoice = useCallback(async () => {
@@ -353,7 +360,7 @@ export function useVoiceProximity({
         
         // Initialize audio context
         if (!audioContextRef.current) {
-          audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+          audioContextRef.current = new (window.AudioContext || window.webkitAudioContext || AudioContext)();
         }
         
         // Resume audio context if suspended
@@ -397,7 +404,7 @@ export function useVoiceProximity({
       
       console.log('Voice chat disabled');
     }
-  }, [isVoiceEnabled, socket, getMicrophoneAccess]); // Removed voiceConnections to prevent infinite loops
+  }, [isVoiceEnabled, socket, getMicrophoneAccess]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Toggle mute
   const toggleMute = useCallback(() => {
@@ -415,7 +422,6 @@ export function useVoiceProximity({
     if (!isVoiceEnabled || !socket) return;
 
     const currentUsersInRange: string[] = [];
-    let connectionChanged = false;
 
     users.forEach(user => {
       const userSocketId = user.socketId || user.id;
@@ -432,7 +438,6 @@ export function useVoiceProximity({
         if (!voiceConnections.has(userSocketId)) {
           console.log('Starting voice connection with user:', user.name, 'socketId:', userSocketId);
           startVoiceConnection(userSocketId);
-          connectionChanged = true;
         } else {
           // Update distance and volume
           const connection = voiceConnections.get(userSocketId);
@@ -484,13 +489,12 @@ export function useVoiceProximity({
           });
           gainNodesRef.current.delete(userSocketId);
           lastVolumeUpdateRef.current.delete(userSocketId);
-          connectionChanged = true;
         }
       }
     });
 
     setUsersInRange(currentUsersInRange);
-  }, [users, currentUser, isVoiceEnabled, proximityThreshold, calculateDistance, calculateVolume, startVoiceConnection, socket]);
+  }, [users, currentUser, isVoiceEnabled, proximityThreshold, calculateDistance, calculateVolume, startVoiceConnection, socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Socket event listeners
   useEffect(() => {
@@ -505,7 +509,7 @@ export function useVoiceProximity({
       socket.off('voice:answer', handleVoiceAnswer);
       socket.off('voice:ice-candidate', handleIceCandidate);
     };
-  }, [socket]); // Removed callback dependencies to prevent infinite loop
+  }, [socket]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => {
@@ -531,7 +535,7 @@ export function useVoiceProximity({
         audioContextRef.current.close();
       }
     };
-  }, []); // Remove voiceConnections from dependencies to prevent infinite loops
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     // State

@@ -183,7 +183,7 @@ export default function VirtualOffice() {
         setSocket(null);
       }
     };
-  }, [isConnected, socket, me.id, me.avatarSeed]); // Removed Zustand store functions to prevent infinite loops
+  }, [isConnected, socket, me.id, me.avatarSeed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Handle office click for movement
   const handleOfficeClick = (e: React.MouseEvent<HTMLDivElement>) => {
