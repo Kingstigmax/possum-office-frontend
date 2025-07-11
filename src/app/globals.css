@@ -1,3 +1,206 @@
+/* Minimal CSS Reset - Login Screen Friendly */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* SPECTACULAR ANIMATION SUITE FOR POSSUM OFFICE */
+
+/* Core animations */
+@keyframes gentle-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes activity-appear {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Aurora drift for backgrounds */
+@keyframes aurora-drift {
+  0% { transform: rotate(0deg) translateX(0px); }
+  25% { transform: rotate(90deg) translateX(20px); }
+  50% { transform: rotate(180deg) translateX(0px); }
+  75% { transform: rotate(270deg) translateX(-20px); }
+  100% { transform: rotate(360deg) translateX(0px); }
+}
+
+/* Neural network drift */
+@keyframes neural-drift {
+  0% { transform: rotate(0deg) translateX(0px) translateY(0px); }
+  20% { transform: rotate(72deg) translateX(15px) translateY(10px); }
+  40% { transform: rotate(144deg) translateX(5px) translateY(-15px); }
+  60% { transform: rotate(216deg) translateX(-10px) translateY(5px); }
+  80% { transform: rotate(288deg) translateX(10px) translateY(-10px); }
+  100% { transform: rotate(360deg) translateX(0px) translateY(0px); }
+}
+
+/* Communication waves */
+@keyframes communication-waves {
+  0% { transform: rotate(0deg) translateX(0px) scale(1); }
+  33% { transform: rotate(120deg) translateX(10px) scale(1.1); }
+  66% { transform: rotate(240deg) translateX(-5px) scale(0.9); }
+  100% { transform: rotate(360deg) translateX(0px) scale(1); }
+}
+
+/* Floating particles */
+@keyframes float-particle {
+  0%, 100% { 
+    transform: translateY(0px) translateX(0px) rotate(0deg);
+    opacity: 0.6;
+  }
+  25% { 
+    transform: translateY(-8px) translateX(4px) rotate(90deg);
+    opacity: 1;
+  }
+  50% { 
+    transform: translateY(-4px) translateX(8px) rotate(180deg);
+    opacity: 0.8;
+  }
+  75% { 
+    transform: translateY(4px) translateX(-4px) rotate(270deg);
+    opacity: 0.9;
+  }
+}
+
+/* Icon glow effect */
+@keyframes icon-glow {
+  0%, 100% { 
+    box-shadow: 0 12px 40px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transform: scale(1);
+  }
+  50% { 
+    box-shadow: 0 16px 50px rgba(102, 126, 234, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    transform: scale(1.05);
+  }
+}
+
+/* Status pulse enhanced */
+@keyframes status-pulse {
+  0%, 100% { 
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% { 
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+/* Shine effect */
+@keyframes shine {
+  0% { left: -100%; }
+  100% { left: 100%; }
+}
+
+/* Microphone pulse */
+@keyframes mic-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Avatar pulse for speaking */
+@keyframes avatar-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    filter: brightness(1);
+  }
+  50% { 
+    transform: scale(1.05);
+    filter: brightness(1.1);
+  }
+}
+
+/* Badge pulse for speaking indicator */
+@keyframes badge-pulse {
+  0%, 100% { 
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.05);
+    opacity: 0.9;
+  }
+}
+
+/* Rainbow drift for team members */
+@keyframes rainbow-drift {
+  0% { transform: rotate(0deg) translateX(0px); }
+  16% { transform: rotate(60deg) translateX(10px); }
+  32% { transform: rotate(120deg) translateX(5px); }
+  48% { transform: rotate(180deg) translateX(-5px); }
+  64% { transform: rotate(240deg) translateX(-10px); }
+  80% { transform: rotate(300deg) translateX(5px); }
+  100% { transform: rotate(360deg) translateX(0px); }
+}
+
+/* Icon pulse variation */
+@keyframes icon-pulse {
+  0%, 100% { 
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% { 
+    transform: scale(1.1) rotate(2deg);
+    opacity: 0.9;
+  }
+}
+
+/* Scrollbar styling for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* Temporary debug - remove after testing */
+/* 
+* {
+  outline: 1px solid red !important;
+}
+*/

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 
 interface AvatarProps {
@@ -9,10 +9,33 @@ interface AvatarProps {
     status: string;
     avatarSeed?: string;
     isMe?: boolean;
+    isMoving?: boolean;
+    isInVoiceRange?: boolean;
+    isSpeaking?: boolean;
+    voiceEnabled?: boolean;
   }
   
-  export default function Avatar({ id, name, x, y, status, avatarSeed, isMe = false }: AvatarProps) {
+  export default function Avatar({ 
+    id, 
+    name, 
+    x, 
+    y, 
+    status, 
+    avatarSeed, 
+    isMe = false, 
+    isMoving = false,
+    isInVoiceRange = false,
+    isSpeaking = false,
+    voiceEnabled = false
+  }: AvatarProps) {
     const [isHovered, setIsHovered] = useState(false);
+    const [ghostTrail, setGhostTrail] = useState<Array<{x: number, y: number, id: number, opacity: number}>>([]);
+    const [isPathfinding, setIsPathfinding] = useState(false);
+    const [previousX, setPreviousX] = useState(x);
+    const [previousY, setPreviousY] = useState(y);
+    const animationRef = useRef<number | null>(null);
+    const trailUpdateRef = useRef<NodeJS.Timeout | null>(null);
+    
     const statusColors = {
       available: '#10b981',
       busy: '#ef4444',
@@ -29,7 +52,76 @@ interface AvatarProps {
       // Fallback to original
       return `https://api.dicebear.com/7.x/avataaars/svg?seed=${id}`;
     };
-  
+
+
+
+    // Ghost trail system
+    const updateGhostTrail = (newX: number, newY: number) => {
+      if (Math.abs(newX - previousX) > 0.5 || Math.abs(newY - previousY) > 0.5) {
+        const newTrailPoint = {
+          x: previousX,
+          y: previousY,
+          id: Date.now() + Math.random(),
+          opacity: 0.6
+        };
+        
+        setGhostTrail(prev => {
+          const updated = [...prev, newTrailPoint];
+          // Keep only last 12 trail points
+          return updated.slice(-12);
+        });
+        
+        setPreviousX(newX);
+        setPreviousY(newY);
+      }
+    };
+
+    // Handle position changes with pathfinding effects
+    useEffect(() => {
+      if (x !== previousX || y !== previousY) {
+        setIsPathfinding(true);
+        updateGhostTrail(x, y);
+        
+        // Clear pathfinding state after movement
+        const timeoutId = window.setTimeout(() => {
+          setIsPathfinding(false);
+        }, 800);
+        
+        return () => window.clearTimeout(timeoutId);
+      }
+    }, [x, y, previousX, previousY, updateGhostTrail]);
+
+    // Animate ghost trail opacity decay
+    useEffect(() => {
+      const updateTrail = () => {
+        setGhostTrail(prev => 
+          prev.map(point => ({
+            ...point,
+            opacity: Math.max(0, point.opacity - 0.02)
+          })).filter(point => point.opacity > 0.1)
+        );
+      };
+
+      trailUpdateRef.current = setInterval(updateTrail, 50);
+      return () => {
+        if (trailUpdateRef.current) {
+          clearInterval(trailUpdateRef.current);
+        }
+      };
+    }, []);
+
+    // Cleanup on unmount
+    useEffect(() => {
+      return () => {
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+        if (trailUpdateRef.current) {
+          clearInterval(trailUpdateRef.current);
+        }
+      };
+    }, []);
+
     return (
       <div
         className="absolute"
@@ -37,20 +129,99 @@ interface AvatarProps {
           left: `${x}%`,
           top: `${y}%`,
           transform: 'translate(-50%, -50%)',
-          zIndex: isMe ? 20 : 10,
+          zIndex: isMe ? 25 : 15,
           transition: 'left 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94), top 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        {/* Avatar Circle */}
+        {/* Ghost Trail System */}
+        {ghostTrail.map((trailPoint, index) => (
+          <div
+            key={trailPoint.id}
+            style={{
+              position: 'absolute',
+              left: `${(trailPoint.x - x) * 100}%`,
+              top: `${(trailPoint.y - y) * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              width: `${28 - index * 2}px`,
+              height: `${28 - index * 2}px`,
+              borderRadius: '50%',
+              background: isMe 
+                ? `radial-gradient(circle, rgba(102, 126, 234, ${trailPoint.opacity * 0.6}) 0%, rgba(102, 126, 234, ${trailPoint.opacity * 0.2}) 70%, transparent 100%)`
+                : `radial-gradient(circle, rgba(59, 130, 246, ${trailPoint.opacity * 0.4}) 0%, rgba(59, 130, 246, ${trailPoint.opacity * 0.1}) 70%, transparent 100%)`,
+              pointerEvents: 'none',
+              zIndex: -1,
+              animation: `ghostFade ${0.8 + index * 0.1}s ease-out forwards`,
+              border: `1px solid rgba(255, 255, 255, ${trailPoint.opacity * 0.3})`,
+              boxShadow: `0 0 ${10 + index * 2}px rgba(102, 126, 234, ${trailPoint.opacity * 0.3})`
+            }}
+          />
+        ))}
+
+        {/* Proximity Glow Effect */}
+        {(isInVoiceRange || isSpeaking) && (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              background: isSpeaking 
+                ? `radial-gradient(circle, rgba(16, 185, 129, 0.3) 0%, rgba(16, 185, 129, 0.1) 50%, transparent 70%)`
+                : `radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, rgba(59, 130, 246, 0.05) 50%, transparent 70%)`,
+              pointerEvents: 'none',
+              zIndex: -1,
+              animation: isSpeaking 
+                ? 'proximityPulse 1s ease-in-out infinite'
+                : 'proximityGlow 2s ease-in-out infinite alternate',
+              border: `2px solid rgba(${isSpeaking ? '16, 185, 129' : '59, 130, 246'}, 0.4)`,
+              boxShadow: `0 0 25px rgba(${isSpeaking ? '16, 185, 129' : '59, 130, 246'}, 0.6)`
+            }}
+          />
+        )}
+
+        {/* Enhanced Avatar Circle with Gaming Effects */}
         <div className="relative">
+          {/* Pathfinding Visual Indicator */}
+          {isPathfinding && (
+            <div
+              style={{
+                position: 'absolute',
+                left: '50%',
+                top: '50%',
+                transform: 'translate(-50%, -50%)',
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                border: '2px solid rgba(34, 197, 94, 0.6)',
+                animation: 'pathfindingPulse 0.8s ease-out infinite',
+                pointerEvents: 'none',
+                zIndex: -1
+              }}
+            />
+          )}
+
+          {/* Main Avatar */}
           <div 
             className="rounded-full bg-white cursor-pointer"
             style={{ 
               width: '32px', 
               height: '32px',
-              border: '1px solid rgba(0, 0, 0, 0.2)'
+              border: isMe 
+                ? '2px solid rgba(102, 126, 234, 0.8)'
+                : '2px solid rgba(59, 130, 246, 0.6)',
+              boxShadow: isMe 
+                ? '0 0 15px rgba(102, 126, 234, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.3)'
+                : '0 0 10px rgba(59, 130, 246, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.3)',
+              transform: isHovered ? 'scale(1.1)' : 'scale(1)',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              background: isMe 
+                ? 'linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(248, 250, 252, 1) 100%)'
+                : 'linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%)'
             }}
           >
             <Image
@@ -63,36 +234,130 @@ interface AvatarProps {
               unoptimized
             />
           </div>
-          
-          {/* Status Indicator - positioned on bottom-left corner */}
-          <svg 
-            className="absolute"
+
+          {/* Enhanced Status Indicator */}
+          <div
             style={{
+              position: 'absolute',
               bottom: '3px',
               left: '3px',
               transform: 'translate(-50%, 50%)',
-              width: '12px',
-              height: '12px'
+              width: '14px',
+              height: '14px',
+              borderRadius: '50%',
+              background: statusColors[status as keyof typeof statusColors] || '#6b7280',
+              border: '2px solid white',
+              boxShadow: `0 0 8px ${statusColors[status as keyof typeof statusColors] || '#6b7280'}`,
+              animation: isMoving ? 'statusPulse 1s ease-in-out infinite' : 'none'
             }}
-            viewBox="0 0 12 12"
-          >
-            <circle 
-              cx="6" 
-              cy="6" 
-              r="5" 
-              fill={statusColors[status as keyof typeof statusColors] || '#6b7280'}
-              stroke="white"
-              strokeWidth="2"
-            />
-          </svg>
+          />
+
+          {/* Voice Status Indicator */}
+          {voiceEnabled && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '3px',
+                right: '3px',
+                transform: 'translate(50%, 50%)',
+                width: '14px',
+                height: '14px',
+                borderRadius: '50%',
+                background: isSpeaking ? '#ef4444' : '#10b981',
+                border: '2px solid white',
+                boxShadow: `0 0 8px ${isSpeaking ? '#ef4444' : '#10b981'}`,
+                animation: isSpeaking ? 'voicePulse 0.6s ease-in-out infinite' : 'none',
+                fontSize: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                fontWeight: 'bold'
+              }}
+            >
+              {isSpeaking ? '🔊' : '🎤'}
+            </div>
+          )}
         </div>
         
-        {/* Hover Name Tag */}
+        {/* Enhanced Hover Name Tag */}
         {isHovered && (
-          <div className="absolute top-full mt-1 left-1/2 transform -translate-x-1/2 bg-black bg-opacity-75 text-white text-xs px-2 py-1 rounded whitespace-nowrap pointer-events-none">
-            {name} {isMe && '(You)'}
+          <div 
+            style={{
+              position: 'absolute',
+              top: '100%',
+              marginTop: '8px',
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'rgba(0, 0, 0, 0.9)',
+              backdropFilter: 'blur(10px)',
+              color: 'white',
+              fontSize: '12px',
+              padding: '6px 12px',
+              borderRadius: '12px',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)',
+              animation: 'nameTagAppear 0.3s ease-out forwards',
+              zIndex: 30
+            }}
+          >
+            <div style={{ 
+              fontWeight: '600',
+              marginBottom: isMe ? '2px' : '0'
+            }}>
+              {name} {isMe && '(You)'}
+            </div>
+            {isMe && (
+              <div style={{ 
+                fontSize: '10px',
+                color: 'rgba(255, 255, 255, 0.7)',
+                textTransform: 'uppercase'
+              }}>
+                {status}
+              </div>
+            )}
           </div>
         )}
+
+        {/* Add CSS animations */}
+        <style jsx>{`
+          @keyframes ghostFade {
+            0% { opacity: 0.6; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+          }
+          
+          @keyframes proximityPulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
+            50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.5; }
+          }
+          
+          @keyframes proximityGlow {
+            0% { opacity: 0.2; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0.4; transform: translate(-50%, -50%) scale(1.05); }
+          }
+          
+          @keyframes pathfindingPulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.6; }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+          }
+          
+          @keyframes statusPulse {
+            0%, 100% { transform: translate(-50%, 50%) scale(1); }
+            50% { transform: translate(-50%, 50%) scale(1.2); }
+          }
+          
+          @keyframes voicePulse {
+            0%, 100% { transform: translate(50%, 50%) scale(1); }
+            50% { transform: translate(50%, 50%) scale(1.3); }
+          }
+          
+          @keyframes nameTagAppear {
+            0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+            100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          }
+        `}</style>
       </div>
     );
   }
